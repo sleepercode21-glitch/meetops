@@ -1,0 +1,310 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SessionStatus {
+  draft
+  interest_check
+  topic_selection
+  availability_collection
+  polling
+  needs_host_decision
+  scheduling
+  scheduled
+  scheduling_failed
+  rescheduling
+  cancelled
+  completed
+
+  @@map("session_status")
+}
+
+enum CalendarInvitePolicy {
+  all_members
+  interested_members
+  app_only
+
+  @@map("calendar_invite_policy")
+}
+
+enum PollStatus {
+  draft
+  active
+  closed
+  cancelled
+  superseded
+
+  @@map("poll_status")
+}
+
+enum PollType {
+  interest
+  topic
+  availability
+  final_timing
+
+  @@map("poll_type")
+}
+
+enum AuditAction {
+  session_created
+  poll_created
+  poll_option_created
+  poll_option_updated
+  poll_option_deleted
+  poll_published
+  poll_closed
+  vote_submitted
+  vote_changed
+  topic_suggested
+  session_scheduled
+  session_cancelled
+  session_rescheduled
+  scheduling_failed
+  calendar_event_created
+  calendar_event_updated
+  calendar_event_cancelled
+  calendar_attendees_updated
+  member_removed
+  member_role_updated
+
+  @@map("audit_action")
+}
+
+model User {
+  userId       BigInt         @id @default(autoincrement()) @map("user_id")
+  email        String         @unique @db.Citext
+  firstname    String?        @db.VarChar(60)
+  lastname     String?        @db.VarChar(60)
+  profilePhoto String?        @map("profile_photo") @db.VarChar(500)
+  timezone     String         @default("America/Los_Angeles") @db.VarChar(80)
+  joinedAt     DateTime       @default(now()) @map("joined_at") @db.Timestamptz(6)
+  updatedAt    DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  oauthAccounts       OAuthAccount[]
+  createdGroups       Group[]       @relation("GroupCreator")
+  ownedMeetingGroups  Group[]       @relation("GroupDefaultMeetingOwner")
+  memberships         Member[]
+  hostedSessions      Session[]     @relation("SessionHost")
+  ownedMeetings       Session[]     @relation("SessionMeetingOwner")
+  createdPolls        Poll[]
+  pollVotes           PollVote[]
+  suggestions         SuggestedOption[]
+  auditLogs           AuditLog[]
+
+  @@map("users")
+}
+
+model OAuthAccount {
+  oauthAccountId       BigInt    @id @default(autoincrement()) @map("oauth_account_id")
+  userId               BigInt    @map("user_id")
+  provider             String    @db.VarChar(50)
+  providerAccountId    String    @map("provider_account_id") @db.VarChar(255)
+  accessToken          String?   @map("access_token")
+  refreshToken         String?   @map("refresh_token")
+  accessTokenExpiresAt DateTime? @map("access_token_expires_at") @db.Timestamptz(6)
+  scope                String?
+  tokenType            String?   @map("token_type") @db.VarChar(50)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId], map: "ux_oauth_provider_provider_account")
+  @@unique([userId, provider], map: "ux_oauth_user_provider")
+  @@map("oauth_accounts")
+}
+
+model Group {
+  groupId              BigInt    @id @default(autoincrement()) @map("group_id")
+  name                 String    @db.VarChar(60)
+  description          String?   @db.VarChar(500)
+  inviteCode           String?   @unique @map("invite_code") @db.VarChar(20)
+  inviteCodeExpiresAt  DateTime? @map("invite_code_expires_at") @db.Timestamptz(6)
+  inviteEnabled        Boolean   @default(true) @map("invite_enabled")
+  inviteMaxUses        Int       @default(50) @map("invite_max_uses")
+  inviteUsedCount      Int       @default(0) @map("invite_used_count")
+  defaultMeetingOwner  BigInt?   @map("default_meeting_owner")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy            BigInt    @map("created_by")
+
+  creator      User     @relation("GroupCreator", fields: [createdBy], references: [userId], onDelete: Restrict)
+  meetingOwner User?    @relation("GroupDefaultMeetingOwner", fields: [defaultMeetingOwner], references: [userId], onDelete: SetNull)
+  members      Member[]
+  sessions     Session[]
+  auditLogs    AuditLog[]
+
+  @@index([inviteCode], map: "idx_groups_invite_code")
+  @@index([createdBy], map: "idx_groups_created_by")
+  @@index([defaultMeetingOwner], map: "idx_groups_default_meeting_owner")
+  @@map("groups")
+}
+
+model Member {
+  groupId  BigInt   @map("group_id")
+  userId   BigInt   @map("user_id")
+  joinedAt DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+  isAdmin  Boolean  @default(false) @map("is_admin")
+
+  group Group @relation(fields: [groupId], references: [groupId], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId], map: "idx_members_user_id")
+  @@index([groupId], map: "idx_members_group_id")
+  @@index([groupId, isAdmin], map: "idx_members_group_admin")
+  @@map("members")
+}
+
+model Session {
+  sessionId               BigInt               @id @default(autoincrement()) @map("session_id")
+  topic                   String?              @db.VarChar(100)
+  description             String?              @db.VarChar(1000)
+  createdAt               DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  hostId                  BigInt               @map("host")
+  groupId                 BigInt               @map("group_id")
+  meetingOwnerId          BigInt?              @map("meeting_owner")
+  calendarInvitePolicy    CalendarInvitePolicy @default(app_only) @map("calendar_invite_policy")
+  scheduledStartTime      DateTime?            @map("scheduled_start_time") @db.Timestamptz(6)
+  scheduledEndTime        DateTime?            @map("scheduled_end_time") @db.Timestamptz(6)
+  calendarEventId         String?              @map("calendar_event_id") @db.VarChar(255)
+  googleCalendarId        String               @default("primary") @map("google_calendar_id") @db.VarChar(255)
+  meetLink                String?              @map("meet_link") @db.VarChar(500)
+  selectedOptionId        BigInt?              @map("selected_option_id")
+  schedulingError         String?              @map("scheduling_error") @db.VarChar(1000)
+  schedulingAttemptCount  Int                  @default(0) @map("scheduling_attempt_count")
+  lastSchedulingAttemptAt DateTime?            @map("last_scheduling_attempt_at") @db.Timestamptz(6)
+  status                  SessionStatus        @default(draft)
+
+  host           User        @relation("SessionHost", fields: [hostId], references: [userId], onDelete: Restrict)
+  group          Group       @relation(fields: [groupId], references: [groupId], onDelete: Cascade)
+  meetingOwner   User?       @relation("SessionMeetingOwner", fields: [meetingOwnerId], references: [userId], onDelete: SetNull)
+  selectedOption PollOption? @relation("SessionSelectedOption", fields: [selectedOptionId], references: [optionId], onDelete: SetNull)
+  polls          Poll[]
+  auditLogs      AuditLog[]
+
+  @@index([groupId], map: "idx_sessions_group_id")
+  @@index([hostId], map: "idx_sessions_host")
+  @@index([meetingOwnerId], map: "idx_sessions_meeting_owner")
+  @@index([status], map: "idx_sessions_status")
+  @@index([scheduledStartTime], map: "idx_sessions_scheduled_start_time")
+  @@index([calendarEventId], map: "idx_sessions_calendar_event_id")
+  @@index([calendarInvitePolicy], map: "idx_sessions_calendar_invite_policy")
+  @@index([groupId, status, scheduledStartTime], map: "idx_sessions_group_status_start")
+  @@map("sessions")
+}
+
+model Poll {
+  pollId      BigInt     @id @default(autoincrement()) @map("poll_id")
+  sessionId   BigInt     @map("session_id")
+  createdBy   BigInt     @map("created_by")
+  deadline    DateTime?  @db.Timestamptz(6)
+  type        PollType
+  status      PollStatus @default(draft)
+  multiChoice Boolean    @default(false) @map("multi_choice")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  publishedAt DateTime?  @map("published_at") @db.Timestamptz(6)
+  closedAt    DateTime?  @map("closed_at") @db.Timestamptz(6)
+
+  session     Session           @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  creator     User              @relation(fields: [createdBy], references: [userId], onDelete: Restrict)
+  options     PollOption[]
+  votes       PollVote[]
+  suggestions SuggestedOption[]
+  auditLogs   AuditLog[]
+
+  @@index([sessionId], map: "idx_polls_session_id")
+  @@index([createdBy], map: "idx_polls_created_by")
+  @@index([status], map: "idx_polls_status")
+  @@index([deadline], map: "idx_polls_deadline")
+  @@index([type], map: "idx_polls_type")
+  @@index([status, deadline], map: "idx_polls_status_deadline")
+  @@index([sessionId, type, status], map: "idx_polls_session_type_status")
+  @@map("polls")
+}
+
+model PollOption {
+  optionId  BigInt    @id @default(autoincrement()) @map("option_id")
+  pollId    BigInt    @map("poll_id")
+  label     String    @db.VarChar(255)
+  startAt   DateTime? @map("start_at") @db.Timestamptz(6)
+  endAt     DateTime? @map("end_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  poll             Poll       @relation(fields: [pollId], references: [pollId], onDelete: Cascade)
+  votes            PollVote[]
+  selectedSessions Session[]  @relation("SessionSelectedOption")
+
+  @@unique([pollId, label], map: "ux_poll_options_poll_label")
+  @@index([pollId], map: "idx_poll_options_poll_id")
+  @@index([startAt], map: "idx_poll_options_start_at")
+  @@index([pollId, startAt], map: "idx_poll_options_poll_start")
+  @@map("poll_options")
+}
+
+model PollVote {
+  pollVoteId BigInt   @id @default(autoincrement()) @map("poll_vote_id")
+  userId     BigInt   @map("user_id")
+  pollId     BigInt   @map("poll_id")
+  optionId   BigInt   @map("option_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user   User       @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  poll   Poll       @relation(fields: [pollId], references: [pollId], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [optionId], onDelete: Cascade)
+
+  @@unique([pollId, optionId, userId], map: "ux_poll_votes_poll_option_user")
+  @@index([pollId, userId], map: "idx_poll_votes_poll_user")
+  @@index([pollId], map: "idx_poll_votes_poll_id")
+  @@index([optionId], map: "idx_poll_votes_option_id")
+  @@index([userId], map: "idx_poll_votes_user_id")
+  @@map("poll_votes")
+}
+
+model SuggestedOption {
+  suggestionId BigInt   @id @default(autoincrement()) @map("suggestion_id")
+  suggestion   String   @db.VarChar(255)
+  pollId       BigInt   @map("poll_id")
+  suggestedBy  BigInt   @map("suggested_by")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  poll Poll @relation(fields: [pollId], references: [pollId], onDelete: Cascade)
+  user User @relation(fields: [suggestedBy], references: [userId], onDelete: Cascade)
+
+  @@index([pollId], map: "idx_suggested_options_poll_id")
+  @@index([suggestedBy], map: "idx_suggested_options_suggested_by")
+  @@map("suggested_options")
+}
+
+model AuditLog {
+  auditLogId BigInt      @id @default(autoincrement()) @map("audit_log_id")
+  userId     BigInt?     @map("user_id")
+  groupId    BigInt?     @map("group_id")
+  sessionId  BigInt?     @map("session_id")
+  pollId     BigInt?     @map("poll_id")
+  action     AuditAction
+  metadata   Json        @default("{}")
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user    User?    @relation(fields: [userId], references: [userId], onDelete: SetNull)
+  group   Group?   @relation(fields: [groupId], references: [groupId], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  poll    Poll?    @relation(fields: [pollId], references: [pollId], onDelete: Cascade)
+
+  @@index([userId], map: "idx_audit_logs_user_id")
+  @@index([groupId], map: "idx_audit_logs_group_id")
+  @@index([sessionId], map: "idx_audit_logs_session_id")
+  @@index([pollId], map: "idx_audit_logs_poll_id")
+  @@index([action], map: "idx_audit_logs_action")
+  @@index([createdAt], map: "idx_audit_logs_created_at")
+  @@map("audit_logs")
+}
