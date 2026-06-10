@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/v1/jobs/close-expired-polls",
-      "schedule": "*/5 * * * *"
-    }
-  ]
-}

@@ -4,6 +4,7 @@ import { requirePollAccess, requirePollManager } from "@/lib/api/guards";
 import { assertPollDraft, pollResponse } from "@/lib/api/poll-utils";
 import { optionalBoolean, optionalDate, parseBigIntParam } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/auth/session";
+import { closeExpiredPollIfNeeded } from "@/lib/poll-expiration";
 import { prisma } from "@/lib/prisma";
 
 type Context = { params: Promise<{ pollId: string }> };
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest, context: Context) {
     const user = await requireAuth(request);
     const { pollId: id } = await context.params;
     const pollId = parseBigIntParam(id, "pollId");
+    await closeExpiredPollIfNeeded(pollId);
     const { poll, member } = await requirePollAccess(user.userId, pollId);
     return dataResponse(pollResponse(poll, user.userId, member.isAdmin));
   } catch (error) {

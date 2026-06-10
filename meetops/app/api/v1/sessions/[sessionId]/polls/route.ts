@@ -4,6 +4,7 @@ import { requireHostOrAdmin, requireSessionAccess } from "@/lib/api/guards";
 import { pollResponse, pollTypes, statusForPollType } from "@/lib/api/poll-utils";
 import { optionalBoolean, optionalDate, optionalEnum, parseBigIntParam } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/auth/session";
+import { closeExpiredPollsForSession } from "@/lib/poll-expiration";
 import { prisma } from "@/lib/prisma";
 
 type Context = { params: Promise<{ sessionId: string }> };
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest, context: Context) {
     const { sessionId: id } = await context.params;
     const sessionId = parseBigIntParam(id, "sessionId");
     const { session, member } = await requireSessionAccess(user.userId, sessionId);
+    await closeExpiredPollsForSession(sessionId);
     const polls = await prisma.poll.findMany({
       where: { sessionId },
       include: {

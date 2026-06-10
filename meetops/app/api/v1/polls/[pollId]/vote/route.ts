@@ -3,6 +3,7 @@ import { ApiError, dataResponse, errorResponse } from "@/lib/api/errors";
 import { requirePollAccess } from "@/lib/api/guards";
 import { parseBigIntParam } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/auth/session";
+import { closeExpiredPollIfNeeded } from "@/lib/poll-expiration";
 import { prisma } from "@/lib/prisma";
 
 type Context = { params: Promise<{ pollId: string }> };
@@ -12,6 +13,7 @@ export async function PUT(request: NextRequest, context: Context) {
     const user = await requireAuth(request);
     const { pollId: id } = await context.params;
     const pollId = parseBigIntParam(id, "pollId");
+    await closeExpiredPollIfNeeded(pollId);
     const { poll } = await requirePollAccess(user.userId, pollId);
     validateVoteState(poll.status, poll.deadline, poll.session.status);
     const body = (await request.json()) as { option_ids?: unknown };
@@ -59,6 +61,7 @@ export async function DELETE(request: NextRequest, context: Context) {
     const user = await requireAuth(request);
     const { pollId: id } = await context.params;
     const pollId = parseBigIntParam(id, "pollId");
+    await closeExpiredPollIfNeeded(pollId);
     const { poll } = await requirePollAccess(user.userId, pollId);
     validateVoteState(poll.status, poll.deadline, poll.session.status);
     await prisma.pollVote.deleteMany({ where: { pollId, userId: user.userId } });
