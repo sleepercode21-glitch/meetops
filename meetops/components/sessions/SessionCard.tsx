@@ -2,12 +2,10 @@ import { ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
 import { StatusBadge } from "@/components/common/Badge";
 import { TimeDisplay } from "@/components/common/TimeDisplay";
-import { getGroup, getUser } from "@/lib/mock-data";
+import { calendarInvitePolicyLabels } from "@/lib/labels";
 import type { Session } from "@/types/domain";
 
 export function SessionCard({ session }: { session: Session }) {
-  const group = getGroup(session.groupId);
-  const host = getUser(session.hostId);
   const needsAction =
     session.status === "needs_host_decision" || session.status === "scheduling_failed";
 
@@ -21,7 +19,9 @@ export function SessionCard({ session }: { session: Session }) {
             </h2>
             <StatusBadge status={session.status} />
           </div>
-          <p className="mt-1 text-sm text-zinc-500">{group?.name}</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            {calendarInvitePolicyLabels[session.calendarInvitePolicy]}
+          </p>
         </div>
         {session.meetLink ? (
           <ButtonLink href={session.meetLink} tone="primary">
@@ -35,7 +35,7 @@ export function SessionCard({ session }: { session: Session }) {
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="text-sm">
           <div className="text-zinc-500">Host</div>
-          <div className="font-medium text-zinc-950">{host?.name ?? "Unknown host"}</div>
+          <div className="font-medium text-zinc-950">Session host</div>
         </div>
         <TimeDisplay
           start={session.scheduledStartTime}

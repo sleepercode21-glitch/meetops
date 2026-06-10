@@ -1,61 +1,58 @@
+import Link from "next/link";
 import { ButtonLink } from "@/components/common/Buttons";
 
-const features = [
-  "Topic and timing polls",
-  "Google Meet link generation",
-  "Calendar invites when needed",
-  "Host/admin decision handling",
+const steps = [
+  "Join a group",
+  "Host a session",
+  "Collect votes",
+  "Schedule the Meet",
 ];
 
 export function LoginComponent() {
   return (
-    <main className="min-h-screen bg-zinc-50 px-4 py-8 text-zinc-950">
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="space-y-8">
-          <div>
-            <p className="text-sm font-medium uppercase text-zinc-500">
-              TechUp Sessions
-            </p>
-            <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-normal text-zinc-950 sm:text-5xl">
-              Coordinate community sessions without WhatsApp chaos.
-            </h1>
-            <p className="mt-5 max-w-2xl text-lg text-zinc-600">
-              Create sessions, collect topic ideas, vote on times, and generate Google
-              Meet links from one shared workflow.
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {features.map((feature) => (
+    <main className="h-screen overflow-hidden bg-zinc-50 text-zinc-950">
+      <header className="border-b border-zinc-200 bg-white">
+        <div className="mx-auto flex h-12 max-w-5xl items-center justify-between px-4 sm:px-8">
+          <Link href="/" className="font-semibold">
+            TechUp Sessions
+          </Link>
+          <ButtonLink href="/login" tone="secondary">
+            Sign in
+          </ButtonLink>
+        </div>
+      </header>
+      <section className="mx-auto grid h-[calc(100vh-3rem)] max-w-5xl content-center gap-6 px-4 py-5 sm:px-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+        <div className="max-w-2xl">
+          <h1 className="text-3xl font-semibold tracking-normal text-zinc-950 sm:text-5xl">
+            Plan group sessions without WhatsApp chaos.
+          </h1>
+          <p className="mt-4 max-w-xl text-base text-zinc-600 sm:text-lg">
+            Create a session, collect topic or timing votes, and schedule a Google
+            Meet link for your private group.
+          </p>
+          <ButtonLink href="/api/auth/google/start" tone="primary" className="mt-5">
+            Sign in with Google
+          </ButtonLink>
+        </div>
+        <section>
+          <h2 className="text-sm font-semibold uppercase text-zinc-500">
+            How it works
+          </h2>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {steps.map((step, index) => (
               <div
-                key={feature}
-                className="rounded-lg border border-zinc-200 bg-white p-4 text-sm font-medium shadow-sm"
+                key={step}
+                className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm"
               >
-                {feature}
+                <div className="text-xs font-medium text-zinc-500">
+                  {index + 1}
+                </div>
+                <div className="mt-1 text-sm font-medium">{step}</div>
               </div>
             ))}
           </div>
         </section>
-        <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="mb-6 flex size-12 items-center justify-center rounded-lg bg-zinc-950 text-lg font-semibold text-white">
-            TS
-          </div>
-          <h2 className="text-xl font-semibold">Sign in to TechUp Sessions</h2>
-          <p className="mt-2 text-sm text-zinc-600">
-            Google is used for login and Calendar event creation. Tokens are never
-            shown in the browser.
-          </p>
-          <ButtonLink
-            href="/api/auth/google/start"
-            tone="primary"
-            className="mt-6 w-full"
-          >
-            Continue with Google
-          </ButtonLink>
-          <p className="mt-4 text-xs text-zinc-500">
-            Google will ask for Calendar event permission so the app can create Meet links.
-          </p>
-        </section>
-      </div>
+      </section>
     </main>
   );
 }

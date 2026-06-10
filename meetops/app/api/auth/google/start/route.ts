@@ -24,8 +24,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const state = createOAuthState();
     const redirectTo = request.nextUrl.searchParams.get("redirect_to") ?? "/dashboard";
+    const state = createOAuthState(redirectTo);
     const authUrl = new URL(googleAuthUrl);
 
     authUrl.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID ?? "");
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set("state", state);
 
     const response = NextResponse.redirect(authUrl);
-    response.cookies.set(OAUTH_STATE_COOKIE_NAME, `${state}:${redirectTo}`, {
+    response.cookies.set(OAUTH_STATE_COOKIE_NAME, state, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

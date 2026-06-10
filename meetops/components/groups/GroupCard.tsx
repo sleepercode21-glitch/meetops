@@ -13,18 +13,15 @@ export function GroupCard({ group }: { group: Group }) {
         </div>
         <RoleBadge role={group.role} />
       </div>
-      <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
+      <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
         <Metric label="Members" value={group.memberCount} />
         <Metric label="Upcoming" value={group.upcomingSessionCount} />
         <Metric label="Polls" value={group.activePollCount} />
       </div>
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <ButtonLink href={`/groups/${group.id}`} tone="primary">
           Open group
         </ButtonLink>
-        {group.role === "admin" ? (
-          <ButtonLink href={`/groups/${group.id}/settings`}>Settings</ButtonLink>
-        ) : null}
       </div>
     </Card>
   );

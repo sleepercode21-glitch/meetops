@@ -12,6 +12,12 @@ type SessionPayload = {
   exp: number;
 };
 
+type OAuthStatePayload = {
+  nonce: string;
+  redirectTo: string;
+  exp: number;
+};
+
 export type AuthUser = {
   userId: bigint;
   email: string;
@@ -38,8 +44,36 @@ export function isPlaceholder(value: string | undefined) {
   return !value || value.includes("replace_me") || value.includes("REPLACE_ME");
 }
 
-export function createOAuthState() {
-  return crypto.randomBytes(32).toString("base64url");
+export function createOAuthState(redirectTo: string) {
+  const exp = Math.floor(Date.now() / 1000) + 60 * 10;
+  const encodedPayload = Buffer.from(
+    JSON.stringify({
+      nonce: crypto.randomBytes(32).toString("base64url"),
+      redirectTo,
+      exp,
+    } satisfies OAuthStatePayload),
+  ).toString("base64url");
+  const signature = sign(encodedPayload);
+  return `${encodedPayload}.${signature}`;
+}
+
+export function verifyOAuthState(value: string): OAuthStatePayload | null {
+  const [encodedPayload, signature] = value.split(".");
+  if (!encodedPayload || !signature) return null;
+
+  const expected = sign(encodedPayload);
+  if (!constantTimeEqual(signature, expected)) return null;
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(encodedPayload, "base64url").toString("utf8"),
+    ) as OAuthStatePayload;
+    if (!payload.nonce || !payload.redirectTo || !payload.exp) return null;
+    if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 export function createSessionCookieValue(payload: Omit<SessionPayload, "exp">) {

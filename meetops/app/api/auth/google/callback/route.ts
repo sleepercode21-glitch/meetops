@@ -8,6 +8,7 @@ import {
   OAUTH_STATE_COOKIE_NAME,
   SESSION_COOKIE_NAME,
   sessionCookieOptions,
+  verifyOAuthState,
 } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
@@ -25,14 +26,18 @@ export async function GET(request: NextRequest) {
     const state = request.nextUrl.searchParams.get("state");
     const storedState = request.cookies.get(OAUTH_STATE_COOKIE_NAME)?.value;
 
-    if (!code || !state || !storedState) {
+    if (!code || !state) {
       throw new Error("Google OAuth callback is missing required state.");
     }
 
-    const [expectedState, redirectTo = "/dashboard"] = storedState.split(":");
-    if (state !== expectedState) {
+    if (storedState && state !== storedState) {
       throw new Error("Google OAuth state did not match.");
     }
+    const statePayload = verifyOAuthState(state);
+    if (!statePayload) {
+      throw new Error("Google OAuth state was invalid or expired.");
+    }
+    const redirectTo = statePayload.redirectTo;
 
     const tokens = await exchangeGoogleCode({
       code,

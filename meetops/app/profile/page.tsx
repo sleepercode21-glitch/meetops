@@ -1,9 +1,11 @@
 import { AuthenticatedPage } from "@/components/app-shell/AuthenticatedPage";
 import { Card, SectionTitle } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
-import { currentUser } from "@/lib/mock-data";
+import { getCurrentUser } from "@/lib/web-api";
 
-export default function ProfilePage() {
+export default async function ProfilePage() {
+  const currentUser = await getCurrentUser();
+
   return (
     <AuthenticatedPage>
       <div className="space-y-6">

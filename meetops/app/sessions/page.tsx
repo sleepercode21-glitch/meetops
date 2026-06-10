@@ -2,28 +2,44 @@ import { AuthenticatedPage } from "@/components/app-shell/AuthenticatedPage";
 import { ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
+import { EmptyState } from "@/components/common/States";
 import { SessionCard } from "@/components/sessions/SessionCard";
-import { sessions } from "@/lib/mock-data";
+import { getAllUserSessions, getCurrentUser } from "@/lib/web-api";
+import type { Session } from "@/types/domain";
+
+const activeStatuses = new Set<Session["status"]>([
+  "draft",
+  "interest_check",
+  "topic_selection",
+  "availability_collection",
+  "polling",
+  "needs_host_decision",
+  "scheduling",
+  "scheduling_failed",
+  "rescheduling",
+  "scheduled",
+]);
 
 export default function SessionsPage() {
-  return <SessionsList title="Sessions" subtitle="Browse sessions across your groups." filter="all" />;
+  return <SessionsList title="Active Sessions" subtitle="Sessions that still need planning, voting, scheduling, or attendance." filter="active" />;
 }
 
-export function SessionsList({
+export async function SessionsList({
   title,
   subtitle,
   filter,
 }: {
   title: string;
   subtitle: string;
-  filter: "all" | "hosted" | "upcoming" | "past";
+  filter: "active" | "hosted" | "upcoming" | "past";
 }) {
-  const filtered = sessions.filter((session) => {
-    if (filter === "hosted") return session.hostId === "u1";
-    if (filter === "upcoming") return session.status === "scheduled";
-    if (filter === "past") return ["completed", "cancelled"].includes(session.status);
-    return true;
-  });
+  const [sessions, currentUser] = await Promise.all([
+    getAllUserSessions(),
+    getCurrentUser(),
+  ]);
+  const filtered = sessions
+    .filter((session) => sessionMatchesFilter(session, filter, currentUser.id))
+    .sort(sortSessions);
 
   return (
     <AuthenticatedPage>
@@ -31,23 +47,65 @@ export function SessionsList({
         <PageHeader
           title={title}
           subtitle={subtitle}
-          primaryAction={<ButtonLink href="/sessions/new" tone="primary">Create session</ButtonLink>}
+          primaryAction={<ButtonLink href="/groups" tone="primary">Host from Group</ButtonLink>}
         />
         <Card>
-          <div className="grid gap-3 md:grid-cols-5">
-            <input className="rounded-md border border-zinc-300 px-3 py-2 text-sm" placeholder="Search by topic" />
-            <select className="rounded-md border border-zinc-300 px-3 py-2 text-sm"><option>All groups</option></select>
-            <select className="rounded-md border border-zinc-300 px-3 py-2 text-sm"><option>All statuses</option></select>
-            <input className="rounded-md border border-zinc-300 px-3 py-2 text-sm" type="date" />
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" /> Hosted by me</label>
+          <div className="grid gap-3 text-sm text-zinc-600 md:grid-cols-4">
+            <Summary label="Active" value={sessions.filter(isActiveSession).length} />
+            <Summary label="Upcoming" value={sessions.filter(isUpcomingSession).length} />
+            <Summary label="Hosted" value={sessions.filter((session) => session.hostId === currentUser.id && isActiveSession(session)).length} />
+            <Summary label="Past" value={sessions.filter(isPastSession).length} />
           </div>
         </Card>
-        <div className="space-y-3">
-          {filtered.map((session) => (
-            <SessionCard key={session.id} session={session} />
-          ))}
-        </div>
+        {filtered.length ? (
+          <div className="space-y-3">
+            {filtered.map((session) => (
+              <SessionCard key={session.id} session={session} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No sessions here"
+            body="This view only shows sessions that match its lifecycle status."
+            action={<ButtonLink href="/groups" tone="primary">Go to groups</ButtonLink>}
+          />
+        )}
       </div>
     </AuthenticatedPage>
+  );
+}
+
+function sessionMatchesFilter(session: Session, filter: "active" | "hosted" | "upcoming" | "past", userId: string) {
+  if (filter === "hosted") return session.hostId === userId && isActiveSession(session);
+  if (filter === "upcoming") return isUpcomingSession(session);
+  if (filter === "past") return isPastSession(session);
+  return isActiveSession(session);
+}
+
+function isActiveSession(session: Session) {
+  return activeStatuses.has(session.status);
+}
+
+function isPastSession(session: Session) {
+  return session.status === "completed" || session.status === "cancelled";
+}
+
+function isUpcomingSession(session: Session) {
+  return session.status === "scheduled";
+}
+
+function sortSessions(a: Session, b: Session) {
+  const left = a.scheduledStartTime ? new Date(a.scheduledStartTime).getTime() : Number.MAX_SAFE_INTEGER;
+  const right = b.scheduledStartTime ? new Date(b.scheduledStartTime).getTime() : Number.MAX_SAFE_INTEGER;
+  if (left !== right) return left - right;
+  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+}
+
+function Summary({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
+      <div className="text-lg font-semibold text-zinc-950">{value}</div>
+      <div className="text-xs font-medium uppercase text-zinc-500">{label}</div>
+    </div>
   );
 }

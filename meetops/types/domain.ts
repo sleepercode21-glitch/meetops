@@ -71,7 +71,10 @@ export type Poll = {
   deadline?: string;
   options: PollOption[];
   currentUserVoteIds: string[];
+  suggestions: Suggestion[];
   acceptsSuggestions: boolean;
+  resultsVisible: boolean;
+  currentUserCanManage: boolean;
 };
 
 export type Suggestion = {
@@ -99,6 +102,7 @@ export type Session = {
   schedulingAttemptCount: number;
   lastSchedulingAttemptAt?: string;
   schedulingError?: string;
+  currentUserCanManage?: boolean;
   createdAt: string;
   updatedAt: string;
 };
