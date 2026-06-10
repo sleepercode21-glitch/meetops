@@ -1,5 +1,9 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PollStatusBadge } from "@/components/common/Badge";
-import { Button, ButtonLink } from "@/components/common/Buttons";
+import { ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
 import { TimeDisplay } from "@/components/common/TimeDisplay";
 import { pollTypeLabels } from "@/lib/labels";
@@ -7,8 +11,45 @@ import { relativeDeadline } from "@/lib/date-time";
 import type { Poll } from "@/types/domain";
 
 export function PollCard({ poll }: { poll: Poll }) {
+  const router = useRouter();
+  const [selected, setSelected] = useState<string[]>(poll.currentUserVoteIds);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const totalVotes = poll.options.reduce((sum, option) => sum + option.voteCount, 0);
   const isActive = poll.status === "active";
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+  function nextSelection(optionId: string) {
+    if (!poll.multiChoice) return [optionId];
+    return selected.includes(optionId)
+      ? selected.filter((id) => id !== optionId)
+      : [...selected, optionId];
+  }
+
+  async function saveVote(optionId: string) {
+    if (!isActive || pending) return;
+    const next = nextSelection(optionId);
+    if (!next.length) return;
+    setSelected(next);
+    setPending(true);
+    setMessage(null);
+
+    const response = await fetch(`/api/v1/polls/${poll.id}/vote`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ option_ids: next.map(Number) }),
+    });
+
+    setPending(false);
+    if (!response.ok) {
+      setSelected(poll.currentUserVoteIds);
+      setMessage(await apiMessage(response, "Could not save your vote."));
+      return;
+    }
+
+    setMessage("Saved.");
+    router.refresh();
+  }
 
   return (
     <Card>
@@ -25,34 +66,41 @@ export function PollCard({ poll }: { poll: Poll }) {
           </div>
           <p className="mt-1 text-sm text-zinc-500">{relativeDeadline(poll.deadline)}</p>
         </div>
-        {isActive ? <Button tone="primary">Submit vote</Button> : null}
+        <ButtonLink href={`/sessions/${poll.sessionId}`} tone={isActive ? "primary" : "secondary"}>
+          Open Session
+        </ButtonLink>
       </div>
       <div className="mt-4 space-y-2">
         {poll.options.length ? (
           poll.options.map((option) => {
-            const selected = poll.currentUserVoteIds.includes(option.id);
+            const optionSelected = selectedSet.has(option.id);
             const percent = totalVotes ? Math.round((option.voteCount / totalVotes) * 100) : 0;
             return (
-              <label
+              <button
+                type="button"
                 key={option.id}
-                className={`block rounded-md border p-3 ${
-                  selected ? "border-blue-300 bg-blue-50" : "border-zinc-200 bg-white"
-                }`}
+                disabled={!isActive || pending}
+                onClick={() => saveVote(option.id)}
+                className={`block w-full rounded-md border p-3 text-left transition ${
+                  optionSelected ? "border-blue-300 bg-blue-50" : "border-zinc-200 bg-white"
+                } ${isActive ? "hover:border-zinc-400" : "cursor-default"} disabled:opacity-80`}
+                aria-pressed={optionSelected}
               >
                 <div className="flex items-start gap-3">
-                  <input
-                    readOnly
-                    checked={selected}
-                    type={poll.multiChoice ? "checkbox" : "radio"}
-                    name={poll.id}
-                    className="mt-1"
-                  />
+                  <span
+                    aria-hidden
+                    className={`mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border ${
+                      optionSelected ? "border-blue-700 bg-blue-700" : "border-zinc-400 bg-white"
+                    }`}
+                  >
+                    {optionSelected ? <span className="size-1.5 rounded-full bg-white" /> : null}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-zinc-950">{option.label}</div>
                     {option.startAt ? (
                       <TimeDisplay start={option.startAt} end={option.endAt} />
                     ) : null}
-                    {selected ? (
+                    {optionSelected ? (
                       <div className="mt-1 text-xs font-medium text-blue-700">
                         You voted for this
                       </div>
@@ -73,7 +121,7 @@ export function PollCard({ poll }: { poll: Poll }) {
                     ) : null}
                   </div>
                 </div>
-              </label>
+              </button>
             );
           })
         ) : (
@@ -82,14 +130,24 @@ export function PollCard({ poll }: { poll: Poll }) {
           </div>
         )}
       </div>
+      {isActive ? (
+        <p className="mt-3 text-sm text-zinc-600">
+          {pending ? "Saving..." : "Click an option to save your vote. Click another option to change it."}
+        </p>
+      ) : null}
+      {message ? <p className="mt-2 text-sm text-zinc-700">{message}</p> : null}
       {poll.status === "draft" ? (
         <div className="mt-4 flex flex-wrap gap-2">
           <ButtonLink href={`/sessions/${poll.sessionId}/polls/${poll.id}/edit`} tone="primary">
             Edit draft
           </ButtonLink>
-          <Button disabled={!poll.options.length}>Publish</Button>
         </div>
       ) : null}
     </Card>
   );
+}
+
+async function apiMessage(response: Response, fallback: string) {
+  const body = await response.json().catch(() => null);
+  return body?.error?.message ?? fallback;
 }

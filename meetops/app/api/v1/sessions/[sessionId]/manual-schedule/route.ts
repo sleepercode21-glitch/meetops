@@ -22,6 +22,9 @@ export async function POST(request: NextRequest, context: Context) {
       : null;
     const startAt = optionalDate(body.start_at, "start_at") ?? null;
     const endAt = optionalDate(body.end_at, "end_at") ?? null;
+    if (!selectedOptionId && startAt && startAt <= new Date()) {
+      throw new ApiError("VALIDATION_ERROR", "start_at must be in the future.");
+    }
     const label = optionalString(body.label, "label", 255, { allowNull: true });
     const result = await scheduleSession({
       sessionId,

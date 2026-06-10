@@ -5,6 +5,7 @@ import { ButtonLink } from "@/components/common/Buttons";
 import { Card, SectionTitle } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PollCard } from "@/components/polls/PollCard";
+import { RealtimeSessionRefresh } from "@/components/sessions/RealtimeSessionRefresh";
 import { SessionCard } from "@/components/sessions/SessionCard";
 import {
   ApiRequestError,
@@ -30,6 +31,8 @@ export default async function GroupDetailPage({
   const groupPolls = (await Promise.all(
     visibleSessions.map((session) => getSessionPolls(session.id)),
   )).flat();
+  const activePolls = groupPolls.filter((poll) => poll.status === "active");
+  const liveEnabled = activePolls.length > 0 || activePlanningSessions.length > 0;
   const owner = group.default_meeting_owner;
 
   return (
@@ -71,9 +74,12 @@ export default async function GroupDetailPage({
               </div>
             </section>
             <section>
-              <SectionTitle title="Active polls" />
+              <SectionTitle
+                title="Active polls"
+                action={<RealtimeSessionRefresh enabled={liveEnabled} />}
+              />
               <div className="space-y-3">
-                {groupPolls.filter((poll) => poll.status === "active").length ? groupPolls.filter((poll) => poll.status === "active").map((poll) => (
+                {activePolls.length ? activePolls.map((poll) => (
                   <PollCard key={poll.id} poll={poll} />
                 )) : (
                   <EmptyPanel text="No open polls." />

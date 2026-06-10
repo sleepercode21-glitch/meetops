@@ -16,6 +16,7 @@ export function ManualScheduleForm({
   const [selectedOptionId, setSelectedOptionId] = useState(options[0]?.id ?? "");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
+  const [minimumDateTime] = useState(() => toLocalDateTime(new Date(Date.now() + 60_000).toISOString()));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,6 +24,11 @@ export function ManualScheduleForm({
     setPending(true);
     setError(null);
     const useOption = Boolean(selectedOptionId);
+    if (!useOption && (!startAt || !endAt || startAt < minimumDateTime || endAt <= startAt)) {
+      setPending(false);
+      setError("Choose a future start time and an end time after it.");
+      return;
+    }
     const response = await fetch(`/api/v1/sessions/${sessionId}/manual-schedule`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -78,21 +84,28 @@ export function ManualScheduleForm({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium">Start</span>
-            <input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm" />
+            <input type="datetime-local" value={startAt} min={minimumDateTime} onChange={(event) => setStartAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm" />
           </label>
           <label className="block">
             <span className="text-sm font-medium">End</span>
-            <input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm" />
+            <input type="datetime-local" value={endAt} min={startAt || minimumDateTime} onChange={(event) => setEndAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm" />
           </label>
         </div>
       ) : null}
       {error ? <p className="text-sm text-rose-700">{error}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button tone="primary" disabled={pending} onClick={submit}>
-          {pending ? "Scheduling..." : "Schedule Selected Time"}
+          {pending ? "Scheduling..." : selectedOptionId ? "Schedule This Time" : "Schedule Custom Time"}
         </Button>
-        <ButtonLink href={`/sessions/${sessionId}/polls/new`}>Create New Poll</ButtonLink>
+        <ButtonLink href={`/sessions/${sessionId}/polls/new`}>Run Another Timing Poll</ButtonLink>
       </div>
     </div>
   );
+}
+
+function toLocalDateTime(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }

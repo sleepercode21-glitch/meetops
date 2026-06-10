@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { dataResponse, errorResponse } from "@/lib/api/errors";
 import { requirePollManager } from "@/lib/api/guards";
-import { assertPollDraft, assertTimeOptionValidity, pollOptionResponse } from "@/lib/api/poll-utils";
+import { assertPollDraft, assertTimeOptionValidity, normalizePollOptionLabel, pollOptionResponse } from "@/lib/api/poll-utils";
 import { optionalDate, optionalString, parseBigIntParam } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
@@ -17,7 +17,8 @@ export async function PATCH(request: NextRequest, context: Context) {
     const { poll } = await requirePollManager(user.userId, option.pollId);
     assertPollDraft(poll.status);
     const body = (await request.json()) as { label?: unknown; start_at?: unknown; end_at?: unknown };
-    const label = optionalString(body.label, "label", 255);
+    const rawLabel = optionalString(body.label, "label", 255);
+    const label = rawLabel !== undefined ? normalizePollOptionLabel(poll.type, rawLabel ?? "") : undefined;
     const startAt = optionalDate(body.start_at, "start_at");
     const endAt = optionalDate(body.end_at, "end_at");
     const nextStart = startAt !== undefined ? startAt : option.startAt;

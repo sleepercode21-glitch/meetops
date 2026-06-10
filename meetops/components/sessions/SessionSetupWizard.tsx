@@ -5,24 +5,22 @@ import { TimeDisplay } from "@/components/common/TimeDisplay";
 import { PollWorkflowCard } from "@/components/polls/PollWorkflowCard";
 import { RealtimeSessionRefresh } from "@/components/sessions/RealtimeSessionRefresh";
 import { SessionActions } from "@/components/sessions/SessionActions";
+import { SessionProgressReview } from "@/components/sessions/SessionProgressReview";
 import { SessionStatusBanner } from "@/components/sessions/SessionStatusBanner";
 import { calendarInvitePolicyLabels } from "@/lib/labels";
 import type { ApiGroupDetail } from "@/lib/web-api";
 import type { Poll, PollType, Session } from "@/types/domain";
 
-const stepOrder = [
-  "draft",
-  "interest",
-  "topic",
-  "availability",
-  "timing",
-  "scheduling",
-  "scheduled",
-  "cancelled",
-  "completed",
-] as const;
-
-type WizardStep = (typeof stepOrder)[number];
+type WizardStep =
+  | "draft"
+  | "interest"
+  | "topic"
+  | "availability"
+  | "timing"
+  | "scheduling"
+  | "scheduled"
+  | "cancelled"
+  | "completed";
 
 const stepLabels: Record<WizardStep, string> = {
   draft: "Draft",
@@ -49,8 +47,8 @@ export function SessionSetupWizard({
   const currentStep = stepForSession(session, polls);
   const activePolls = polls.filter((poll) => poll.status === "active");
   const draftPolls = polls.filter((poll) => poll.status === "draft");
-  const closedPolls = polls.filter((poll) => poll.status === "closed");
   const currentPolls = pollsForStep(polls, currentStep);
+  const reviewPoll = currentPolls.length ? undefined : latestClosedPollForStep(polls, currentStep);
   const liveEnabled = shouldRefresh(session, polls);
 
   if (!canManage) {
@@ -86,91 +84,73 @@ export function SessionSetupWizard({
         <PrimarySessionAction session={session} canManage={canManage} activePolls={activePolls} />
       </div>
 
-      <SessionStatusBanner session={session} />
+      {["needs_host_decision", "scheduling_failed", "scheduled"].includes(session.status) ? (
+        <SessionStatusBanner session={session} />
+      ) : null}
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-9">
-          {stepOrder.map((step, index) => (
-            <WizardStepItem
-              key={step}
-              label={stepLabels[step]}
-              state={stepState(step, currentStep)}
-              index={index + 1}
-            />
-          ))}
-        </div>
-      </section>
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.7fr)]">
-        <main className="space-y-5">
-          <section id="current-step" className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+      <SessionProgressReview
+        title="Delivery Tracker"
+        steps={hostFlowSteps(session.status)}
+        currentStep={currentStep}
+        polls={polls}
+        session={session}
+        canManage={canManage}
+        currentContent={
+          <section id="current-step">
             <SectionTitle
-              title={activeTitle(currentStep)}
-              subtitle={activeSubtitle(currentStep, canManage)}
+              title={hostMainTitle(currentStep, currentPolls, reviewPoll)}
+              subtitle={reviewPoll ? "Review the result, then continue with the next setup step." : activeSubtitle(currentStep, canManage)}
               action={
                 canManage && !["scheduled", "cancelled", "completed"].includes(currentStep) ? (
                   <ButtonLink href={`/sessions/${session.id}/polls/new`} tone="primary">
-                    New Poll
+                    {reviewPoll ? "Continue Setup" : "New Poll"}
                   </ButtonLink>
                 ) : null
               }
             />
             <div className="space-y-3">
               {currentPolls.length ? (
-                currentPolls.map((poll) => (
+                currentPolls.slice(0, 1).map((poll) => (
                   <PollWorkflowCard key={poll.id} poll={poll} canManage={canManage} />
                 ))
+              ) : reviewPoll ? (
+                <>
+                  <PollWorkflowCard poll={reviewPoll} canManage={canManage} />
+                  <HostNextStepPanel session={session} step={currentStep} />
+                </>
               ) : (
                 <EmptyStep session={session} step={currentStep} canManage={canManage} />
               )}
             </div>
           </section>
+        }
+      />
 
-          {draftPolls.some((poll) => !currentPolls.includes(poll)) ? (
-            <PollSection
-              title="Draft Queue"
-              subtitle="Suggestions can continue here until the host publishes."
-              polls={draftPolls.filter((poll) => !currentPolls.includes(poll))}
-              canManage={canManage}
-            />
-          ) : null}
-
-          {activePolls.some((poll) => !currentPolls.includes(poll)) ? (
-            <PollSection
-              title="Open Polls"
-              polls={activePolls.filter((poll) => !currentPolls.includes(poll))}
-              canManage={canManage}
-            />
-          ) : null}
-
-          {closedPolls.length ? (
-            <PollSection title="Closed Polls" polls={closedPolls} canManage={canManage} />
-          ) : null}
-        </main>
-
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <main />
         <aside className="space-y-4">
           <Card>
-            <SectionTitle title="Session Controls" />
+            <SectionTitle title="Host Actions" />
             <SessionActions session={session} canManage={canManage} />
           </Card>
-          <Card>
-            <SectionTitle title="Meeting" />
-            {session.scheduledStartTime ? (
-              <TimeDisplay start={session.scheduledStartTime} end={session.scheduledEndTime} />
-            ) : (
-              <p className="text-sm text-zinc-600">Waiting for a final time.</p>
-            )}
-            <Info label="Invite policy" value={calendarInvitePolicyLabels[session.calendarInvitePolicy]} />
-            <Info label="Meet link" value={session.meetLink ?? "Not created"} />
-          </Card>
-          <Card>
-            <SectionTitle title="Poll Counts" />
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <Metric label="Draft" value={draftPolls.length} />
-              <Metric label="Open" value={activePolls.length} />
-              <Metric label="Closed" value={closedPolls.length} />
+          <details className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-950">
+              Session details
+            </summary>
+            <div className="mt-3">
+              {session.scheduledStartTime ? (
+                <TimeDisplay start={session.scheduledStartTime} end={session.scheduledEndTime} />
+              ) : (
+                <p className="text-sm text-zinc-600">Waiting for a final time.</p>
+              )}
+              <Info label="Invite policy" value={calendarInvitePolicyLabels[session.calendarInvitePolicy]} />
+              <Info label="Meet link" value={session.meetLink ?? "Not created"} />
+              <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+                <Metric label="Draft" value={draftPolls.length} />
+                <Metric label="Open" value={activePolls.length} />
+              </div>
             </div>
-          </Card>
+          </details>
           {session.schedulingError ? (
             <Card className="border-rose-200 bg-rose-50">
               <SectionTitle title="Scheduling Error" />
@@ -196,11 +176,6 @@ function MemberSessionWizard({
   currentStep: WizardStep;
   liveEnabled: boolean;
 }) {
-  const activePolls = polls.filter((poll) => poll.status === "active");
-  const visibleDrafts = polls.filter((poll) => poll.status === "draft" && poll.acceptsSuggestions);
-  const closedPolls = polls.filter((poll) => poll.status === "closed");
-  const focusPolls = activePolls.length ? activePolls : visibleDrafts;
-
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <div>
@@ -219,72 +194,74 @@ function MemberSessionWizard({
         ) : null}
       </div>
 
-      <MemberProgress step={currentStep} />
-      <MemberStatusPanel session={session} />
+      <MemberProgress step={currentStep} polls={polls} session={session} />
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-        <SectionTitle
-          title={memberActionTitle(session, focusPolls)}
-          subtitle={memberActionSubtitle(session, focusPolls)}
-        />
-        <div className="space-y-3">
-          {focusPolls.length ? (
-            focusPolls.map((poll) => (
-              <PollWorkflowCard key={poll.id} poll={poll} canManage={false} />
-            ))
-          ) : (
-            <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
-              {memberEmptyText(session)}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {closedPolls.length ? (
-        <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <SectionTitle title="Past Results" />
-          <div className="space-y-3">
-            {closedPolls.map((poll) => (
-              <PollWorkflowCard key={poll.id} poll={poll} canManage={false} />
-            ))}
-          </div>
-        </section>
-      ) : null}
     </div>
   );
 }
 
-function MemberProgress({ step }: { step: WizardStep }) {
+function MemberProgress({
+  step,
+  polls,
+  session,
+}: {
+  step: WizardStep;
+  polls: Poll[];
+  session: Session;
+}) {
   if (step === "cancelled" || step === "completed") {
     return (
-      <section className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
-        <WizardStepItem
-          label={stepLabels[step]}
-          state="current"
-          index={1}
-        />
-      </section>
+      <SessionProgressReview
+        title="Session Progress"
+        steps={[step]}
+        currentStep={step}
+        polls={polls}
+        session={session}
+        canManage={false}
+        currentContent={<MemberCurrentAction session={session} focusPolls={[]} />}
+      />
     );
   }
 
   const memberSteps: WizardStep[] = ["interest", "topic", "availability", "timing", "scheduled"];
-  const normalized = step === "draft" || step === "scheduling" ? "timing" : step;
-  const currentIndex = Math.max(0, memberSteps.indexOf(normalized));
-
+  const normalized = step === "draft" ? "interest" : step === "scheduling" ? "timing" : step;
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
-      <div className="grid gap-2 sm:grid-cols-5">
-        {memberSteps.map((item, index) => {
-          const state = index < currentIndex ? "done" : index === currentIndex ? "current" : "todo";
-          return (
-            <WizardStepItem
-              key={item}
-              label={stepLabels[item]}
-              state={state}
-              index={index + 1}
-            />
-          );
-        })}
+    <SessionProgressReview
+      title="Session Progress"
+      steps={memberSteps}
+      currentStep={normalized}
+      polls={polls}
+      session={session}
+      canManage={false}
+      currentContent={<MemberCurrentAction session={session} focusPolls={polls.filter((poll) => poll.status === "active" || (poll.status === "draft" && poll.acceptsSuggestions))} />}
+    />
+  );
+}
+
+function MemberCurrentAction({
+  session,
+  focusPolls,
+}: {
+  session: Session;
+  focusPolls: Poll[];
+}) {
+  return (
+    <section id={`step-${stepForSession(session, focusPolls)}`} className="scroll-mt-24">
+      <MemberStatusPanel session={session} />
+      <SectionTitle
+        title={memberActionTitle(session, focusPolls)}
+        subtitle={memberActionSubtitle(session, focusPolls)}
+      />
+      <div className="space-y-3">
+        {focusPolls.length ? (
+          focusPolls.map((poll) => (
+            <PollWorkflowCard key={poll.id} poll={poll} canManage={false} />
+          ))
+        ) : (
+          <div className="rounded-md border border-dashed border-zinc-300 bg-white p-4 text-sm text-zinc-600">
+            {memberEmptyText(session)}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -333,53 +310,6 @@ function MemberStatusPanel({ session }: { session: Session }) {
   );
 }
 
-function WizardStepItem({
-  label,
-  state,
-  index,
-}: {
-  label: string;
-  state: "done" | "current" | "todo";
-  index: number;
-}) {
-  const tone =
-    state === "current"
-      ? "border-zinc-950 bg-zinc-950 text-white"
-      : state === "done"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-        : "border-zinc-200 bg-zinc-50 text-zinc-500";
-
-  return (
-    <div className={`min-h-20 rounded-md border p-3 ${tone}`}>
-      <div className="text-xs font-medium opacity-75">Step {index}</div>
-      <div className="mt-3 text-sm font-semibold">{label}</div>
-    </div>
-  );
-}
-
-function PollSection({
-  title,
-  subtitle,
-  polls,
-  canManage,
-}: {
-  title: string;
-  subtitle?: string;
-  polls: Poll[];
-  canManage: boolean;
-}) {
-  return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-      <SectionTitle title={title} subtitle={subtitle} />
-      <div className="space-y-3">
-        {polls.map((poll) => (
-          <PollWorkflowCard key={poll.id} poll={poll} canManage={canManage} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function EmptyStep({
   session,
   step,
@@ -422,6 +352,43 @@ function EmptyStep({
           Choose Time
         </ButtonLink>
       ) : null}
+    </div>
+  );
+}
+
+function HostNextStepPanel({
+  session,
+  step,
+}: {
+  session: Session;
+  step: WizardStep;
+}) {
+  if (step === "timing") {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+        <p className="text-sm font-semibold text-amber-950">Pick the final time</p>
+        <p className="mt-1 text-sm text-amber-800">
+          If the timing poll has a clear winner, scheduling can continue. If not, choose manually or run timing again.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <ButtonLink href={`/sessions/${session.id}/reschedule`} tone="primary">
+            Choose Time
+          </ButtonLink>
+          <ButtonLink href={`/sessions/${session.id}/polls/new`}>
+            Run Timing Poll
+          </ButtonLink>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4">
+      <p className="text-sm font-semibold text-emerald-950">{nextStepHeading(step)}</p>
+      <p className="mt-1 text-sm text-emerald-800">{nextStepText(step)}</p>
+      <ButtonLink href={`/sessions/${session.id}/polls/new`} tone="primary" className="mt-3">
+        Create Next Poll
+      </ButtonLink>
     </div>
   );
 }
@@ -477,15 +444,28 @@ function stepForPollType(type: PollType): WizardStep {
 }
 
 function pollsForStep(polls: Poll[], step: WizardStep) {
-  return polls.filter((poll) => stepForPollType(poll.type) === step && poll.status !== "cancelled" && poll.status !== "superseded");
+  return polls.filter((poll) => stepForPollType(poll.type) === step && (poll.status === "active" || poll.status === "draft"));
 }
 
-function stepState(step: WizardStep, current: WizardStep) {
-  const stepIndex = stepOrder.indexOf(step);
-  const currentIndex = stepOrder.indexOf(current);
-  if (stepIndex < currentIndex) return "done";
-  if (stepIndex === currentIndex) return "current";
-  return "todo";
+function latestClosedPollForStep(polls: Poll[], step: WizardStep) {
+  return [...polls]
+    .reverse()
+    .find((poll) => stepForPollType(poll.type) === step && poll.status === "closed");
+}
+
+function hostFlowSteps(status: Session["status"]): WizardStep[] {
+  if (status === "cancelled") return ["cancelled"];
+  if (status === "completed") return ["completed"];
+  return ["draft", "interest", "topic", "availability", "timing", "scheduling", "scheduled", "completed"];
+}
+
+function hostMainTitle(step: WizardStep, polls: Poll[], reviewPoll?: Poll) {
+  const active = polls.find((poll) => poll.status === "active");
+  const draft = polls.find((poll) => poll.status === "draft");
+  if (active) return "Open for Voting";
+  if (draft) return "Draft Poll";
+  if (reviewPoll) return `${stepLabels[step]} Results`;
+  return activeTitle(step);
 }
 
 function activeTitle(step: WizardStep) {
@@ -511,6 +491,20 @@ function emptyText(step: WizardStep, canManage: boolean) {
   if (step === "cancelled") return "This session was cancelled.";
   if (step === "completed") return "This session is no longer active.";
   return canManage ? "Create the next poll for this step." : "Waiting for the host.";
+}
+
+function nextStepHeading(step: WizardStep) {
+  if (step === "interest") return "Next: choose the topic";
+  if (step === "topic") return "Next: collect availability";
+  if (step === "availability") return "Next: decide final timing";
+  return "Next: continue setup";
+}
+
+function nextStepText(step: WizardStep) {
+  if (step === "interest") return "The interest check is closed. Create a topic poll to narrow what this session should cover.";
+  if (step === "topic") return "The topic poll is closed. Create an availability poll so members can share workable time windows.";
+  if (step === "availability") return "Availability is collected. Create the final timing poll with specific options.";
+  return "Use the next poll to keep the session moving.";
 }
 
 function memberActionTitle(session: Session, polls: Poll[]) {

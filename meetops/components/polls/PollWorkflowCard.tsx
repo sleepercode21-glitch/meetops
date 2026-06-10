@@ -22,7 +22,6 @@ export function PollWorkflowCard({
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const totalVotes = poll.options.reduce((sum, option) => sum + option.voteCount, 0);
-  const hasVoted = poll.currentUserVoteIds.length > 0;
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   function toggleOption(optionId: string) {
@@ -40,10 +39,6 @@ export function PollWorkflowCard({
         : [...selected, optionId];
     }
     return [optionId];
-  }
-
-  async function submitVote() {
-    await saveVote(selected);
   }
 
   async function saveVote(optionIds: string[], sourceOptionId?: string) {
@@ -79,16 +74,18 @@ export function PollWorkflowCard({
     router.refresh();
   }
 
-  async function clearVote() {
-    setPending("clear");
+  async function promoteOption(optionId: string) {
+    setPending(`promote-${optionId}`);
     setMessage(null);
-    const response = await fetch(`/api/v1/polls/${poll.id}/vote`, { method: "DELETE" });
+    const response = await fetch(`/api/v1/poll-options/${optionId}/promote-to-final-timing`, {
+      method: "POST",
+    });
     setPending(null);
     if (!response.ok) {
-      setMessage(await apiMessage(response, "Could not clear your vote."));
+      setMessage(await apiMessage(response, "Could not add this time to final timing."));
       return;
     }
-    setSelected([]);
+    setMessage("Added to the final timing poll.");
     router.refresh();
   }
 
@@ -105,9 +102,9 @@ export function PollWorkflowCard({
               </span>
             ) : null}
           </div>
-          {poll.deadline ? (
+          {poll.deadline && poll.status === "active" ? (
             <p className="mt-1 text-sm text-zinc-500">
-              Closes {new Date(poll.deadline).toLocaleString()}
+              Open until {new Date(poll.deadline).toLocaleString()}
             </p>
           ) : null}
         </div>
@@ -129,21 +126,27 @@ export function PollWorkflowCard({
             const percent = totalVotes ? Math.round((option.voteCount / totalVotes) * 100) : 0;
             const showResults = poll.resultsVisible || poll.status !== "active" || canManage;
             return (
-              <label
+              <button
+                type="button"
                 key={option.id}
-                className={`block rounded-md border p-3 ${
+                disabled={canManage || poll.status !== "active" || pending === "vote"}
+                onClick={() => toggleOption(option.id)}
+                className={`block w-full rounded-md border p-3 text-left transition ${
                   checked ? "border-blue-300 bg-blue-50" : "border-zinc-200 bg-white"
-                }`}
+                } ${!canManage && poll.status === "active" ? "hover:border-zinc-400" : "cursor-default"} disabled:opacity-80`}
+                aria-pressed={checked}
               >
                 <div className="flex items-start gap-3">
-                  <input
-                    checked={checked}
-                    disabled={poll.status !== "active" || pending === "vote"}
-                    type={poll.multiChoice ? "checkbox" : "radio"}
-                    name={poll.id}
-                    className="mt-1"
-                    onChange={() => toggleOption(option.id)}
-                  />
+                  {!canManage && poll.status === "active" ? (
+                    <span
+                      aria-hidden
+                      className={`mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border ${
+                        checked ? "border-blue-700 bg-blue-700" : "border-zinc-400 bg-white"
+                      }`}
+                    >
+                      {checked ? <span className="size-1.5 rounded-full bg-white" /> : null}
+                    </span>
+                  ) : null}
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-zinc-950">{option.label}</div>
                     {option.startAt ? <TimeDisplay start={option.startAt} end={option.endAt} /> : null}
@@ -163,7 +166,7 @@ export function PollWorkflowCard({
                     ) : null}
                   </div>
                 </div>
-              </label>
+              </button>
             );
           })
         ) : (
@@ -175,53 +178,84 @@ export function PollWorkflowCard({
 
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
 
-      {poll.status === "active" && canManage ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            tone="primary"
-            disabled={pending === "vote" || selected.length === 0}
-            onClick={submitVote}
-          >
-            {pending === "vote" ? "Saving..." : hasVoted ? "Update Vote" : "Submit Vote"}
-          </Button>
-          {hasVoted ? (
-            <Button disabled={pending === "clear"} onClick={clearVote}>
-              {pending === "clear" ? "Clearing..." : "Clear Vote"}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
       {poll.status === "active" && !canManage ? (
         <p className="mt-3 text-sm text-zinc-600">
-          {pending === "vote" ? "Saving your choice..." : "Click an option to vote. Click another option to change it."}
+          {pending === "vote" ? "Saving..." : "Tap an option to vote."}
         </p>
+      ) : null}
+
+      {poll.status === "closed" && !canManage ? (
+        <p className="mt-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
+          Voting is closed for this poll.
+        </p>
+      ) : null}
+
+      {canManage && poll.status === "closed" && poll.type === "availability" ? (
+        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+          <div className="text-sm font-semibold text-emerald-950">Promote availability result</div>
+          <p className="mt-1 text-sm text-emerald-800">
+            Add a high-vote availability window to the final timing poll.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[...poll.options]
+              .filter((option) => option.startAt && option.endAt)
+              .sort((a, b) => b.voteCount - a.voteCount)
+              .slice(0, 3)
+              .map((option) => (
+                <Button
+                  key={option.id}
+                  type="button"
+                  disabled={pending === `promote-${option.id}`}
+                  onClick={() => promoteOption(option.id)}
+                >
+                  {pending === `promote-${option.id}` ? "Adding..." : `Use ${option.label}`}
+                </Button>
+              ))}
+          </div>
+        </div>
       ) : null}
 
       {canManage && poll.status === "draft" ? (
         <div className="mt-4 flex flex-wrap gap-2">
           <ButtonLink href={`/sessions/${poll.sessionId}/polls/${poll.id}/edit`} tone="primary">
-            Edit Draft
+            Edit
           </ButtonLink>
           <Button
             disabled={!poll.options.length || !poll.deadline || pending === "publish"}
             onClick={() => action(`/api/v1/polls/${poll.id}/publish`, "publish")}
           >
-            {pending === "publish" ? "Publishing..." : "Publish Poll"}
+            {pending === "publish" ? "Opening..." : "Open Voting"}
           </Button>
         </div>
       ) : null}
 
       {poll.acceptsSuggestions ? (
-        <div className="mt-4">
-          <SuggestionPanel
-            pollId={poll.id}
-            pollType={poll.type}
-            pollStatus={poll.status}
-            suggestions={poll.suggestions}
-            canManage={canManage}
-          />
-        </div>
+        canManage ? (
+          <details className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-950">
+              Suggestions {poll.suggestions.length ? `(${poll.suggestions.length})` : ""}
+            </summary>
+            <div className="mt-3">
+              <SuggestionPanel
+                pollId={poll.id}
+                pollType={poll.type}
+                pollStatus={poll.status}
+                suggestions={poll.suggestions}
+                canManage={canManage}
+              />
+            </div>
+          </details>
+        ) : poll.status === "draft" || (poll.status === "active" && poll.type === "topic") ? (
+          <div className="mt-4">
+            <SuggestionPanel
+              pollId={poll.id}
+              pollType={poll.type}
+              pollStatus={poll.status}
+              suggestions={poll.suggestions}
+              canManage={canManage}
+            />
+          </div>
+        ) : null
       ) : null}
     </Card>
   );

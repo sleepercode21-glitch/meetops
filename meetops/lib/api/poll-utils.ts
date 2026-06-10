@@ -49,6 +49,9 @@ export function assertTimeOptionValidity({
       "Time-based polls require start_at and end_at.",
     );
   }
+  if (needsTime && startAt && startAt <= new Date()) {
+    throw new ApiError("VALIDATION_ERROR", "start_at must be in the future.");
+  }
   if (startAt && endAt && endAt <= startAt) {
     throw new ApiError("VALIDATION_ERROR", "end_at must be after start_at.");
   }
@@ -58,6 +61,20 @@ export function assertTimeOptionValidity({
       "Interest and topic poll options cannot include start_at or end_at.",
     );
   }
+}
+
+export function normalizeInterestOptionLabel(label: string) {
+  const normalized = label.trim().toLowerCase();
+  if (normalized === "interested") return "Interested";
+  if (normalized === "maybe") return "Maybe";
+  throw new ApiError(
+    "VALIDATION_ERROR",
+    "Interest polls only support Interested and Maybe options.",
+  );
+}
+
+export function normalizePollOptionLabel(pollType: PollType, label: string) {
+  return pollType === "interest" ? normalizeInterestOptionLabel(label) : label;
 }
 
 export function pollOptionResponse(option: Pick<PollOption, "optionId" | "pollId" | "label" | "startAt" | "endAt" | "createdAt" | "updatedAt"> & { _count?: { votes: number } }, showVotes: boolean) {

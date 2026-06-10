@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { dataResponse, errorResponse } from "@/lib/api/errors";
 import { requirePollManager } from "@/lib/api/guards";
-import { assertPollDraft, assertTimeOptionValidity, pollOptionResponse } from "@/lib/api/poll-utils";
+import { assertPollDraft, assertTimeOptionValidity, normalizePollOptionLabel, pollOptionResponse } from "@/lib/api/poll-utils";
 import { optionalDate, optionalString, parseBigIntParam } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
@@ -17,7 +17,10 @@ export async function POST(request: NextRequest, context: Context) {
     const { poll } = await requirePollManager(user.userId, suggestion.pollId);
     assertPollDraft(poll.status);
     const body = (await request.json().catch(() => ({}))) as { label?: unknown; start_at?: unknown; end_at?: unknown };
-    const label = optionalString(body.label, "label", 255) ?? suggestion.suggestion;
+    const label = normalizePollOptionLabel(
+      poll.type,
+      optionalString(body.label, "label", 255) ?? suggestion.suggestion,
+    );
     const startAt = optionalDate(body.start_at, "start_at") ?? null;
     const endAt = optionalDate(body.end_at, "end_at") ?? null;
     assertTimeOptionValidity({ pollType: poll.type, startAt, endAt });

@@ -39,11 +39,6 @@ export function SessionActions({
 
   return (
     <div className="space-y-2">
-      {session.status === "draft" || session.status === "polling" ? (
-        <ButtonLink href={`/sessions/${session.id}/polls/new`} tone="primary" className="w-full">
-          Create Poll
-        </ButtonLink>
-      ) : null}
       {session.status === "needs_host_decision" ? (
         <ManualScheduleButton sessionId={session.id} />
       ) : null}
@@ -54,7 +49,7 @@ export function SessionActions({
           disabled={pending === "retry"}
           onClick={() => post(`/api/v1/sessions/${session.id}/retry-scheduling`, "retry scheduling")}
         >
-          {pending === "retry" ? "Retrying..." : "Retry Scheduling"}
+          {pending === "retry" ? "Retrying..." : "Try Scheduling Again"}
         </Button>
       ) : null}
       {session.status === "scheduled" ? (
@@ -64,16 +59,21 @@ export function SessionActions({
             disabled={pending === "complete"}
             onClick={() => post(`/api/v1/sessions/${session.id}/complete`, "complete session")}
           >
-            Mark Completed
+            Mark as Completed
           </Button>
           <Button
             className="w-full"
             disabled={pending === "reschedule"}
             onClick={() => post(`/api/v1/sessions/${session.id}/reschedule`, "reschedule")}
           >
-            Reschedule
+            Change Time
           </Button>
         </>
+      ) : null}
+      {!["cancelled", "completed", "scheduled"].includes(session.status) ? (
+        <ButtonLink href={`/sessions/${session.id}/edit`} className="w-full">
+          Edit Session
+        </ButtonLink>
       ) : null}
       {!["cancelled", "completed", "scheduling"].includes(session.status) ? (
         <Button
@@ -82,7 +82,7 @@ export function SessionActions({
           disabled={pending === "cancel"}
           onClick={() => post(`/api/v1/sessions/${session.id}/cancel`, "cancel session")}
         >
-          Cancel Session
+          Cancel
         </Button>
       ) : null}
       {message ? <p className="text-sm text-rose-700">{message}</p> : null}
@@ -93,7 +93,7 @@ export function SessionActions({
 function ManualScheduleButton({ sessionId }: { sessionId: string }) {
   return (
     <ButtonLink href={`/sessions/${sessionId}/reschedule`} tone="primary" className="w-full">
-      Choose Time
+      Choose Final Time
     </ButtonLink>
   );
 }
