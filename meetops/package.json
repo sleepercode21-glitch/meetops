@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "prisma db execute --file db/migrations/001_init_schema.sql",
@@ -12,7 +12,8 @@
     "db:verify": "node scripts/db-verify.mjs",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
-    "prisma:pull": "prisma db pull"
+    "prisma:pull": "prisma db pull", 
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/adapter-neon": "^7.8.0",
