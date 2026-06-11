@@ -1,12 +1,14 @@
 import { NextRequest } from "next/server";
 import { ApiError, dataResponse, errorResponse } from "@/lib/api/errors";
 import { requirePollAccess } from "@/lib/api/guards";
-import { optionalDate, parseBigIntParam } from "@/lib/api/validation";
+import { parseBigIntParam, requiredDate } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/auth/session";
+import { closeExpiredPollIfNeeded } from "@/lib/poll-expiration";
 import { prisma } from "@/lib/prisma";
 
 type Context = { params: Promise<{ pollId: string }> };
-type AvailabilityRow = {
+
+type AvailabilityResponseRow = {
   availability_response_id: bigint;
   poll_id: bigint;
   option_id: bigint;
@@ -20,11 +22,13 @@ export async function GET(request: NextRequest, context: Context) {
     const user = await requireAuth(request);
     const { pollId: id } = await context.params;
     const pollId = parseBigIntParam(id, "pollId");
+    await closeExpiredPollIfNeeded(pollId);
     await requirePollAccess(user.userId, pollId);
-    const rows = await prisma.$queryRaw<AvailabilityRow[]>`
+    const rows = await prisma.$queryRaw<AvailabilityResponseRow[]>`
       select availability_response_id, poll_id, option_id, user_id, start_at, end_at
       from availability_responses
-      where poll_id = ${pollId} and user_id = ${user.userId}
+      where poll_id = ${pollId}
+        and user_id = ${user.userId}
       order by start_at asc
     `;
     return dataResponse(rows.map(responseRow));
@@ -38,57 +42,89 @@ export async function POST(request: NextRequest, context: Context) {
     const user = await requireAuth(request);
     const { pollId: id } = await context.params;
     const pollId = parseBigIntParam(id, "pollId");
+    await closeExpiredPollIfNeeded(pollId);
     const { poll } = await requirePollAccess(user.userId, pollId);
     if (poll.type !== "availability" || poll.status !== "active") {
-      throw new ApiError("INVALID_POLL_STATUS", "Availability responses are only open during an active availability poll.");
+      throw new ApiError("INVALID_POLL_STATUS", "Availability can only be submitted while the poll is active.");
+    }
+    if (poll.session.status === "cancelled" || poll.session.status === "completed") {
+      throw new ApiError("INVALID_SESSION_STATUS", "This session no longer accepts availability.");
     }
 
-    const body = (await request.json()) as { option_id?: unknown; start_at?: unknown; end_at?: unknown };
-    if (typeof body.option_id !== "number" || !Number.isInteger(body.option_id)) {
-      throw new ApiError("VALIDATION_ERROR", "option_id must be a numeric ID.");
-    }
-    const optionId = BigInt(body.option_id);
-    const startAt = optionalDate(body.start_at, "start_at", { required: true });
-    const endAt = optionalDate(body.end_at, "end_at", { required: true });
-    if (!startAt || !endAt || endAt <= startAt) {
-      throw new ApiError("VALIDATION_ERROR", "Availability response must have a valid start and end time.");
+    const body = (await request.json()) as { responses?: unknown };
+    if (!Array.isArray(body.responses)) {
+      throw new ApiError("VALIDATION_ERROR", "responses must be an array.");
     }
 
-    const option = await prisma.pollOption.findFirst({
-      where: { optionId, pollId },
-    });
-    if (!option || !option.startAt || !option.endAt) {
-      throw new ApiError("INVALID_POLL_OPTION", "Availability window does not belong to this poll.");
-    }
-    if (startAt < option.startAt || endAt > option.endAt) {
-      throw new ApiError("VALIDATION_ERROR", "Your availability must stay inside the host's window.");
-    }
-
-    const rows = await prisma.$queryRaw<AvailabilityRow[]>`
-      insert into availability_responses (poll_id, option_id, user_id, start_at, end_at, updated_at)
-      values (${pollId}, ${optionId}, ${user.userId}, ${startAt}, ${endAt}, now())
-      on conflict (option_id, user_id)
-      do update set start_at = excluded.start_at, end_at = excluded.end_at, updated_at = now()
-      returning availability_response_id, poll_id, option_id, user_id, start_at, end_at
-    `;
-    await prisma.auditLog.create({
-      data: {
-        userId: user.userId,
-        groupId: poll.session.groupId,
-        sessionId: poll.sessionId,
-        pollId,
-        action: "vote_submitted",
-        metadata: { kind: "availability_response", option_id: Number(optionId) },
-      },
+    const validOptions = new Map(poll.options.map((option) => [option.optionId.toString(), option]));
+    const responses = body.responses.map((item) => {
+      if (!item || typeof item !== "object") {
+        throw new ApiError("VALIDATION_ERROR", "Each response must be an object.");
+      }
+      const value = item as { option_id?: unknown; start_at?: unknown; end_at?: unknown };
+      if (typeof value.option_id !== "number" || !Number.isInteger(value.option_id)) {
+        throw new ApiError("VALIDATION_ERROR", "option_id must be a numeric ID.");
+      }
+      const optionId = BigInt(value.option_id);
+      const option = validOptions.get(optionId.toString());
+      if (!option) throw new ApiError("INVALID_POLL_OPTION", "Every option must belong to this poll.");
+      const startAt = requiredDate(value.start_at, "start_at");
+      const endAt = requiredDate(value.end_at, "end_at");
+      if (!option.startAt || !option.endAt) {
+        throw new ApiError("INVALID_POLL_OPTION", "Availability option is missing its time window.");
+      }
+      if (startAt < option.startAt || endAt > option.endAt || endAt <= startAt) {
+        throw new ApiError("VALIDATION_ERROR", "Availability must stay inside the host's time window.");
+      }
+      return { optionId, startAt, endAt };
     });
 
-    return dataResponse(responseRow(rows[0]));
+    const optionIds = [...new Set(responses.map((response) => response.optionId.toString()))].map(BigInt);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.pollVote.deleteMany({ where: { pollId, userId: user.userId } });
+      await tx.$executeRaw`
+        delete from availability_responses
+        where poll_id = ${pollId}
+          and user_id = ${user.userId}
+      `;
+
+      for (const optionId of optionIds) {
+        await tx.pollVote.create({ data: { pollId, userId: user.userId, optionId } });
+      }
+      for (const response of responses) {
+        await tx.$executeRaw`
+          insert into availability_responses (poll_id, option_id, user_id, start_at, end_at, updated_at)
+          values (${pollId}, ${response.optionId}, ${user.userId}, ${response.startAt}, ${response.endAt}, now())
+          on conflict (option_id, user_id)
+          do update set start_at = excluded.start_at, end_at = excluded.end_at, updated_at = now()
+        `;
+      }
+
+      await tx.auditLog.create({
+        data: {
+          userId: user.userId,
+          groupId: poll.session.groupId,
+          sessionId: poll.sessionId,
+          pollId,
+          action: optionIds.length ? "vote_submitted" : "vote_changed",
+          metadata: { availability_option_ids: optionIds.map(Number) },
+        },
+      });
+    });
+
+    return dataResponse({
+      poll_id: Number(pollId),
+      user_id: Number(user.userId),
+      option_ids: optionIds.map(Number),
+      updated_at: new Date().toISOString(),
+    });
   } catch (error) {
     return errorResponse(error);
   }
 }
 
-function responseRow(row: AvailabilityRow) {
+function responseRow(row: AvailabilityResponseRow) {
   return {
     availability_response_id: Number(row.availability_response_id),
     poll_id: Number(row.poll_id),

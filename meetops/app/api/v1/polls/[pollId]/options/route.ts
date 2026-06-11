@@ -16,13 +16,14 @@ export async function POST(request: NextRequest, context: Context) {
     const { poll } = await requirePollManager(user.userId, pollId);
     assertPollDraft(poll.status);
     const body = (await request.json()) as { label?: unknown; start_at?: unknown; end_at?: unknown };
-    const label = normalizePollOptionLabel(
-      poll.type,
-      optionalString(body.label, "label", 255, { required: true }) ?? "",
-    );
     const startAt = optionalDate(body.start_at, "start_at") ?? null;
     const endAt = optionalDate(body.end_at, "end_at") ?? null;
     assertTimeOptionValidity({ pollType: poll.type, startAt, endAt });
+    const rawLabel = optionalString(body.label, "label", 255);
+    const label = normalizePollOptionLabel(
+      poll.type,
+      rawLabel || generatedOptionLabel(poll.type, startAt, endAt),
+    );
     const option = await prisma.$transaction(async (tx) => {
       const created = await tx.pollOption.create({ data: { pollId, label, startAt, endAt } });
       await tx.auditLog.create({
@@ -34,4 +35,11 @@ export async function POST(request: NextRequest, context: Context) {
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+function generatedOptionLabel(pollType: string, startAt: Date | null, endAt: Date | null) {
+  if ((pollType === "availability" || pollType === "final_timing") && startAt && endAt) {
+    return `${startAt.toISOString()} - ${endAt.toISOString()}`;
+  }
+  return "Option";
 }

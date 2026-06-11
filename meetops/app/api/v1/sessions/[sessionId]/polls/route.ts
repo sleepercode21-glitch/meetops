@@ -46,9 +46,17 @@ export async function POST(request: NextRequest, context: Context) {
     if (!type) {
       throw new ApiError("VALIDATION_ERROR", "Poll type is required.");
     }
-    const multiChoice = optionalBoolean(body.multi_choice, "multi_choice") ?? false;
+    const multiChoice = optionalBoolean(body.multi_choice, "multi_choice") ?? type === "availability";
     const deadline = optionalDate(body.deadline, "deadline") ?? null;
     const poll = await prisma.$transaction(async (tx) => {
+      await tx.poll.updateMany({
+        where: {
+          sessionId,
+          type,
+          status: { in: ["draft", "active", "closed"] },
+        },
+        data: { status: "superseded" },
+      });
       const created = await tx.poll.create({
         data: { sessionId, createdBy: user.userId, type, multiChoice, deadline },
       });

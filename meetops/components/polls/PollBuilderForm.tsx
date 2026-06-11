@@ -31,7 +31,7 @@ export function PollBuilderForm({
   const router = useRouter();
   const initialPollType = existingPoll?.type ?? defaultPollType;
   const [pollType, setPollType] = useState<PollType>(initialPollType);
-  const [multiChoice, setMultiChoice] = useState(existingPoll?.multiChoice ?? false);
+  const [multiChoice, setMultiChoice] = useState(existingPoll?.multiChoice ?? initialPollType === "availability");
   const [deadline, setDeadline] = useState(toLocalDateTime(existingPoll?.deadline));
   const [minimumDeadline] = useState(() => toLocalDateTime(new Date(Date.now() + 60_000).toISOString()));
   const [options, setOptions] = useState<DraftOption[]>(
@@ -44,7 +44,7 @@ export function PollBuilderForm({
           start_at: toLocalDateTime(option.startAt),
           end_at: toLocalDateTime(option.endAt),
         }))
-      : [{ label: "", start_at: "", end_at: "" }],
+      : emptyOptionsForType(initialPollType),
   );
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,8 +57,11 @@ export function PollBuilderForm({
     if (nextType === "interest") {
       setMultiChoice(false);
       setOptions(fixedInterestOptions());
-    } else if (pollType === "interest") {
-      setOptions([{ label: "", start_at: "", end_at: "" }]);
+    } else {
+      setMultiChoice(nextType === "availability");
+      if (pollType === "interest" || options.filter((option) => !option.deleted).length <= 1) {
+        setOptions(emptyOptionsForType(nextType));
+      }
     }
   }
 
@@ -89,8 +92,20 @@ export function PollBuilderForm({
         throw new Error("Set a future deadline before publishing so members have time to vote.");
       }
       if (timeBased) {
+        const validTimeOptions = options.filter((option) => (
+          !option.deleted &&
+          !isBlankDraftOption(option, timeBased) &&
+          option.start_at &&
+          option.end_at &&
+          option.start_at >= minimumDeadline &&
+          option.end_at > option.start_at
+        ));
+        if (publish && validTimeOptions.length < 1) {
+          throw new Error("Publishing requires at least one valid future time option.");
+        }
         const invalidOption = options.some((option) => (
           !option.deleted &&
+          !isBlankDraftOption(option, timeBased) &&
           (!option.start_at || !option.end_at || option.start_at < minimumDeadline || option.end_at <= option.start_at)
         ));
         if (invalidOption) {
@@ -101,13 +116,15 @@ export function PollBuilderForm({
       if (existingPoll) {
         await updatePoll(pollId);
       }
-      for (const option of options) {
+      for (const [index, option] of options.entries()) {
         if (option.deleted && option.id) {
           await deleteOption(option.id);
+        } else if (option.id && isBlankDraftOption(option, timeBased)) {
+          await deleteOption(option.id);
         } else if (!option.deleted && option.id) {
-          await updateExistingOption(option.id, option);
-        } else if (!option.deleted) {
-          await createOption(pollId, option);
+          await updateExistingOption(option.id, option, index);
+        } else if (!option.deleted && !isBlankDraftOption(option, timeBased)) {
+          await createOption(pollId, option, index);
         }
       }
       if (publish) {
@@ -150,8 +167,8 @@ export function PollBuilderForm({
     if (!response.ok) throw new Error(await apiMessage(response, "Could not update poll."));
   }
 
-  async function createOption(pollId: string, option: DraftOption) {
-    const label = option.label || (timeBased ? "Time option" : "");
+  async function createOption(pollId: string, option: DraftOption, index: number) {
+    const label = pollType === "availability" ? "" : option.label || (timeBased ? `Option ${index + 1}` : "");
     const response = await fetch(`/api/v1/polls/${pollId}/options`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -164,11 +181,11 @@ export function PollBuilderForm({
     if (!response.ok) throw new Error(await apiMessage(response, "Could not add option."));
   }
 
-  async function updateExistingOption(optionId: string, option: DraftOption) {
+  async function updateExistingOption(optionId: string, option: DraftOption, index: number) {
     const response = await fetch(`/api/v1/poll-options/${optionId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(optionBody(option, timeBased)),
+      body: JSON.stringify(optionBody(option, timeBased, index, pollType)),
     });
     if (!response.ok) throw new Error(await apiMessage(response, "Could not update option."));
   }
@@ -256,7 +273,7 @@ export function PollBuilderForm({
             onChange={(event) => setDeadline(event.target.value)}
           />
           <span className="mt-1 block text-xs text-zinc-500">
-            Publishing requires a future deadline. After it passes, the poll closes automatically.
+            Publishing requires a future deadline. Voting stays open until this time.
           </span>
         </label>
       </section>
@@ -264,25 +281,33 @@ export function PollBuilderForm({
       <section className="rounded-md border border-zinc-200 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-sm font-semibold text-zinc-950">
-            {fixedInterest ? "Interest Options" : "Official Options"}
+            {fixedInterest ? "Interest Options" : timeBased ? "Time Options" : "Official Options"}
           </div>
           <div className="text-xs text-zinc-500">{activeOptions.length} option{activeOptions.length === 1 ? "" : "s"}</div>
         </div>
         <div className="space-y-3">
           {options.map((option, index) => option.deleted ? null : (
             <div key={option.id ?? index} className="grid gap-2 rounded-md border border-zinc-200 p-3 md:grid-cols-[1fr_auto]">
-              <div className="grid gap-2 md:grid-cols-3">
-                <input
-                  value={option.label}
-                  disabled={fixedInterest}
-                  className="min-h-10 rounded-md border border-zinc-300 px-3 text-sm"
-                  placeholder={timeBased ? "Label optional" : "Option label"}
-                  onChange={(event) => updateOption(index, { label: event.target.value })}
-                />
+              <div className={`grid gap-2 ${pollType === "availability" ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
+                {pollType !== "availability" ? (
+                  <input
+                    value={option.label}
+                    disabled={fixedInterest}
+                    className="min-h-10 rounded-md border border-zinc-300 px-3 text-sm"
+                    placeholder={timeBased ? "Label optional" : "Option label"}
+                    onChange={(event) => updateOption(index, { label: event.target.value })}
+                  />
+                ) : null}
                 {timeBased ? (
                   <>
-                    <input type="datetime-local" value={option.start_at} min={minimumDeadline} className="min-h-10 rounded-md border border-zinc-300 px-3 text-sm" onChange={(event) => updateOption(index, { start_at: event.target.value })} />
-                    <input type="datetime-local" value={option.end_at} min={option.start_at || minimumDeadline} className="min-h-10 rounded-md border border-zinc-300 px-3 text-sm" onChange={(event) => updateOption(index, { end_at: event.target.value })} />
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">From</span>
+                      <input type="datetime-local" value={option.start_at} min={minimumDeadline} className="min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm" onChange={(event) => updateOption(index, { start_at: event.target.value })} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">To</span>
+                      <input type="datetime-local" value={option.end_at} min={option.start_at || minimumDeadline} className="min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm" onChange={(event) => updateOption(index, { end_at: event.target.value })} />
+                    </label>
                   </>
                 ) : null}
               </div>
@@ -297,16 +322,16 @@ export function PollBuilderForm({
           ))}
         </div>
         {!fixedInterest ? <Button type="button" className="mt-3" onClick={() => setOptions((current) => [...current, { label: "", start_at: "", end_at: "" }])}>
-          Add Option
+          {timeBased ? "Add Time Option" : "Add Option"}
         </Button> : null}
       </section>
       {error ? <p className="text-sm text-rose-700">{error}</p> : null}
       <div className="flex gap-2">
         <Button type="button" disabled={pending === "draft"} onClick={() => submit(false)}>
-          {pending === "draft" ? "Saving..." : "Save Without Publishing"}
+          {pending === "draft" ? "Saving..." : "Save Draft"}
         </Button>
         <Button type="button" tone="primary" disabled={pending === "publish"} onClick={() => submit(true)}>
-          {pending === "publish" ? "Opening..." : "Open Voting"}
+          {pending === "publish" ? "Publishing..." : "Publish Poll"}
         </Button>
       </div>
     </form>
@@ -322,17 +347,32 @@ function fixedInterestOptions(existing: { id: string; label: string; startAt?: s
   ];
 }
 
+function emptyOptionsForType(type: PollType): DraftOption[] {
+  if (type === "availability") {
+    return [
+      { label: "", start_at: "", end_at: "" },
+    ];
+  }
+  return [{ label: "", start_at: "", end_at: "" }];
+}
+
 function pollFlowIndex(type: PollType) {
   return ["interest", "topic", "availability", "final_timing"].indexOf(type);
 }
 
-function optionBody(option: DraftOption, timeBased: boolean) {
-  const label = option.label || (timeBased ? "Time option" : "");
+function optionBody(option: DraftOption, timeBased: boolean, index: number, pollType: PollType) {
+  const label = pollType === "availability" ? "" : option.label || (timeBased ? `Option ${index + 1}` : "");
   return {
     label,
     start_at: timeBased && option.start_at ? new Date(option.start_at).toISOString() : null,
     end_at: timeBased && option.end_at ? new Date(option.end_at).toISOString() : null,
   };
+}
+
+function isBlankDraftOption(option: DraftOption, timeBased: boolean) {
+  if (option.deleted) return false;
+  if (timeBased) return !option.label.trim() && !option.start_at && !option.end_at;
+  return !option.label.trim();
 }
 
 function toLocalDateTime(value?: string) {

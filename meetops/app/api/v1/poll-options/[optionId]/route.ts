@@ -17,13 +17,15 @@ export async function PATCH(request: NextRequest, context: Context) {
     const { poll } = await requirePollManager(user.userId, option.pollId);
     assertPollDraft(poll.status);
     const body = (await request.json()) as { label?: unknown; start_at?: unknown; end_at?: unknown };
-    const rawLabel = optionalString(body.label, "label", 255);
-    const label = rawLabel !== undefined ? normalizePollOptionLabel(poll.type, rawLabel ?? "") : undefined;
     const startAt = optionalDate(body.start_at, "start_at");
     const endAt = optionalDate(body.end_at, "end_at");
     const nextStart = startAt !== undefined ? startAt : option.startAt;
     const nextEnd = endAt !== undefined ? endAt : option.endAt;
     assertTimeOptionValidity({ pollType: poll.type, startAt: nextStart, endAt: nextEnd });
+    const rawLabel = optionalString(body.label, "label", 255);
+    const label = rawLabel !== undefined
+      ? normalizePollOptionLabel(poll.type, rawLabel || generatedOptionLabel(poll.type, nextStart, nextEnd))
+      : undefined;
     const updated = await prisma.$transaction(async (tx) => {
       const changed = await tx.pollOption.update({
         where: { optionId },
@@ -38,6 +40,13 @@ export async function PATCH(request: NextRequest, context: Context) {
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+function generatedOptionLabel(pollType: string, startAt: Date | null, endAt: Date | null) {
+  if ((pollType === "availability" || pollType === "final_timing") && startAt && endAt) {
+    return `${startAt.toISOString()} - ${endAt.toISOString()}`;
+  }
+  return "Option";
 }
 
 export async function DELETE(request: NextRequest, context: Context) {

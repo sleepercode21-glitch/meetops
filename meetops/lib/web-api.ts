@@ -350,10 +350,14 @@ export function groupRole(isAdmin: boolean): UserRole {
 
 export function toSession(session: ApiSessionSummary): Session {
   const detail = isApiSessionDetail(session) ? session : null;
+  const hostName = [session.host.firstname, session.host.lastname]
+    .filter(Boolean)
+    .join(" ") || session.host.email;
   return {
     id: String(session.session_id),
     groupId: String(session.group_id),
     hostId: String(session.host.user_id),
+    hostName,
     topic: session.topic ?? undefined,
     description: session.description ?? undefined,
     status: session.status,

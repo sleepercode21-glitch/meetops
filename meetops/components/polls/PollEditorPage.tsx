@@ -10,12 +10,14 @@ import type { Poll, PollType, Session } from "@/types/domain";
 export async function PollEditorPage({
   sessionId,
   pollId,
+  requestedType,
 }: {
   sessionId: string;
   pollId?: string;
+  requestedType?: string;
 }) {
   const { session, poll, polls } = await getEditorData(sessionId, pollId);
-  const defaultPollType = poll?.type ?? nextPollType(session, polls);
+  const defaultPollType = poll?.type ?? requestedPollType(requestedType) ?? nextPollType(session, polls);
   const title = pollId ? "Edit Poll" : `Create ${pollTypeLabels[defaultPollType]}`;
 
   return (
@@ -95,4 +97,11 @@ function nextPollType(session: Session, polls: Poll[]): PollType {
   if (!completedTypes.has("topic")) return "topic";
   if (!completedTypes.has("availability")) return "availability";
   return "final_timing";
+}
+
+function requestedPollType(value?: string): PollType | undefined {
+  if (value === "interest" || value === "topic" || value === "availability" || value === "final_timing") {
+    return value;
+  }
+  return undefined;
 }

@@ -14,11 +14,8 @@ create table if not exists availability_responses (
 create index if not exists idx_availability_responses_poll_id
   on availability_responses(poll_id);
 
-create index if not exists idx_availability_responses_option_id
-  on availability_responses(option_id);
-
 create index if not exists idx_availability_responses_user_id
   on availability_responses(user_id);
 
-create index if not exists idx_availability_responses_poll_range
-  on availability_responses(poll_id, start_at, end_at);
+create index if not exists idx_availability_responses_option_id
+  on availability_responses(option_id);
