@@ -1,16 +1,16 @@
-import { NextResponse } from "next/server";
-import { getAppBaseUrl, SESSION_COOKIE_NAME } from "@/lib/auth/session";
+import { NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
-export async function GET() {
-  return clearSession();
+export async function GET(request: NextRequest) {
+  return clearSession(request);
 }
 
-export async function POST() {
-  return clearSession();
+export async function POST(request: NextRequest) {
+  return clearSession(request);
 }
 
-function clearSession() {
-  const response = NextResponse.redirect(new URL("/", getAppBaseUrl()));
+function clearSession(request: NextRequest) {
+  const response = NextResponse.redirect(new URL("/", request.nextUrl.origin));
   response.cookies.set(SESSION_COOKIE_NAME, "", {
     httpOnly: true,
     sameSite: "lax",

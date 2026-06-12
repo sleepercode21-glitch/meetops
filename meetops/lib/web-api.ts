@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getAppBaseUrl } from "@/lib/auth/session";
 import type { Group, Poll, Session, Suggestion, User, UserRole } from "@/types/domain";
 
 type ApiEnvelope<T> = { data: T };
@@ -423,7 +424,7 @@ export function toSuggestion(suggestion: ApiSuggestion): Suggestion {
 }
 
 function apiBaseUrl() {
-  return process.env.APP_BASE_URL ?? "http://localhost:3000";
+  return getAppBaseUrl();
 }
 
 function initials(value: string) {

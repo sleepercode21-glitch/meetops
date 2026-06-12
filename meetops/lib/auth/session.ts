@@ -30,7 +30,15 @@ export type AuthUser = {
 };
 
 export function getAppBaseUrl() {
-  return process.env.APP_BASE_URL ?? "http://localhost:3000";
+  const explicit = process.env.APP_BASE_URL;
+  if (explicit && !looksLikeUnexpandedEnv(explicit) && !isPlaceholder(explicit)) {
+    return normalizeBaseUrl(explicit);
+  }
+  const vercelUrl = process.env.VERCEL_URL;
+  if (vercelUrl && !looksLikeUnexpandedEnv(vercelUrl)) {
+    return normalizeBaseUrl(vercelUrl);
+  }
+  return "http://localhost:3000";
 }
 
 export function getGoogleRedirectUri() {
@@ -42,6 +50,22 @@ export function getGoogleRedirectUri() {
 
 export function isPlaceholder(value: string | undefined) {
   return !value || value.includes("replace_me") || value.includes("REPLACE_ME");
+}
+
+export function safeRedirectUrl(redirectTo: string, origin: string) {
+  if (!redirectTo || redirectTo.startsWith("//")) return new URL("/dashboard", origin);
+  const url = new URL(redirectTo, origin);
+  if (url.origin !== origin) return new URL("/dashboard", origin);
+  return url;
+}
+
+function normalizeBaseUrl(value: string) {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function looksLikeUnexpandedEnv(value: string) {
+  return value.includes("{") || value.includes("}") || value.includes("$") || value.includes("VERCEL_URL");
 }
 
 export function createOAuthState(redirectTo: string) {

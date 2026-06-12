@@ -2,17 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeGoogleCode, fetchGoogleProfile, upsertGoogleUserAndOAuthAccount } from "@/lib/auth/google";
 import {
   createSessionCookieValue,
-  getAppBaseUrl,
   getGoogleRedirectUri,
   isPlaceholder,
   OAUTH_STATE_COOKIE_NAME,
+  safeRedirectUrl,
   SESSION_COOKIE_NAME,
   sessionCookieOptions,
   verifyOAuthState,
 } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  const appBaseUrl = getAppBaseUrl();
+  const origin = request.nextUrl.origin;
 
   try {
     if (
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const profile = await fetchGoogleProfile(tokens.access_token);
     const user = await upsertGoogleUserAndOAuthAccount({ profile, tokens });
 
-    const response = NextResponse.redirect(new URL(redirectTo, appBaseUrl));
+    const response = NextResponse.redirect(safeRedirectUrl(redirectTo, origin));
     response.cookies.set(
       SESSION_COOKIE_NAME,
       createSessionCookieValue({
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error(error);
     const response = NextResponse.redirect(
-      new URL("/auth/callback?error=google_sign_in_failed", appBaseUrl),
+      new URL("/auth/callback?error=google_sign_in_failed", origin),
     );
     response.cookies.delete(OAUTH_STATE_COOKIE_NAME);
     return response;
