@@ -1,5 +1,4 @@
 import { ButtonLink } from "@/components/common/Buttons";
-import { Card } from "@/components/common/Card";
 import { RealtimeSessionRefresh } from "@/components/sessions/RealtimeSessionRefresh";
 import { SessionActions } from "@/components/sessions/SessionActions";
 import { SessionComments } from "@/components/sessions/SessionComments";
@@ -32,7 +31,7 @@ export function SessionSetupWizard({
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <h1 className="truncate text-2xl font-semibold text-zinc-950">{session.topic ?? "Untitled session"}</h1>
             <SessionStatusPill status={derivedStatus(session)} />
-            <RealtimeSessionRefresh enabled={liveEnabled} />
+            <RealtimeSessionRefresh enabled={liveEnabled} intervalMs={1000} />
           </div>
         </div>
         {session.status === "scheduled" && session.meetLink ? (
@@ -48,15 +47,14 @@ export function SessionSetupWizard({
           polls={polls}
           canManage={canManageFlow}
           nextAction={nextAction}
+          controls={
+            canManage && !terminalStatus(session.status) ? (
+              <SessionActions session={session} canManage={canManage} />
+            ) : null
+          }
         />
 
         <aside className="space-y-4 lg:sticky lg:top-20">
-          {canManage ? (
-            <HostControlsCard
-              session={session}
-              canManage={canManage}
-            />
-          ) : null}
           <SessionComments
             sessionId={session.id}
             disabled={session.status === "cancelled" || session.status === "completed"}
@@ -64,24 +62,6 @@ export function SessionSetupWizard({
         </aside>
       </div>
     </div>
-  );
-}
-
-function HostControlsCard({
-  session,
-  canManage,
-}: {
-  session: Session;
-  canManage: boolean;
-}) {
-  if (terminalStatus(session.status)) return null;
-  return (
-    <Card className="p-4">
-      <h2 className="text-sm font-semibold text-zinc-950">Host Controls</h2>
-      <div className="mt-3 space-y-2">
-        <SessionActions session={session} canManage={canManage} />
-      </div>
-    </Card>
   );
 }
 

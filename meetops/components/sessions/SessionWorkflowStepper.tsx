@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
+import { ConfirmLink } from "@/components/common/ConfirmAction";
 import { TimeDisplay } from "@/components/common/TimeDisplay";
 import { PollWorkflowCard } from "@/components/polls/PollWorkflowCard";
 import type { Poll, Session } from "@/types/domain";
@@ -15,6 +16,13 @@ export type WorkflowAction = {
   heading: string;
   description: string;
   emptyText: string;
+  confirmMessage?: string;
+};
+
+type StepLinkAction = {
+  href: string;
+  label: string;
+  confirmMessage?: string;
 };
 
 const workflowSteps: { id: WorkflowStep; label: string; shortLabel: string }[] = [
@@ -31,11 +39,13 @@ export function SessionWorkflowStepper({
   polls,
   canManage,
   nextAction,
+  controls,
 }: {
   session: Session;
   polls: Poll[];
   canManage: boolean;
   nextAction?: WorkflowAction;
+  controls?: React.ReactNode;
 }) {
   const currentStep = currentWorkflowStep(session, polls);
   const [selection, setSelection] = useState<{ currentStep: WorkflowStep; selectedStep: WorkflowStep }>({
@@ -49,14 +59,17 @@ export function SessionWorkflowStepper({
   return (
     <Card className="overflow-hidden p-0">
       <div className="border-b border-zinc-200 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h2 className="text-base font-semibold text-zinc-950">Flow</h2>
-            <p className="mt-0.5 text-sm text-zinc-600">Click any reached step to review it.</p>
+            <p className="mt-0.5 text-sm text-zinc-600">Interest, topic, and availability are optional. Timing is required.</p>
           </div>
-          <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
-            Step {selectedIndex + 1} of {workflowSteps.length}
-          </span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <span className="inline-flex min-h-9 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
+              Step {selectedIndex + 1} of {workflowSteps.length}
+            </span>
+            {controls ? <div className="min-w-44">{controls}</div> : null}
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             {workflowSteps.map((step, index) => {
@@ -71,9 +84,12 @@ export function SessionWorkflowStepper({
                   aria-current={selected ? "step" : undefined}
                 >
                   <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${stepCircleTone(status, selected)}`}>
-                    {status === "finish" ? <span className="size-2.5 rounded-full bg-current" /> : index + 1}
+                    {status === "finish" ? <span className="size-2.5 rounded-full bg-current" /> : status === "skipped" ? "–" : index + 1}
                   </span>
-                  <span className="text-xs font-semibold sm:text-sm">{step.shortLabel}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold sm:text-sm">{step.shortLabel}</span>
+                    {status === "skipped" ? <span className="block text-[10px] font-medium opacity-80">Skipped</span> : null}
+                  </span>
                 </button>
               );
             })}
@@ -110,7 +126,7 @@ function SelectedStepPanel({
   nextAction?: WorkflowAction;
 }) {
   if (step === "draft") {
-    return <DraftReview session={session} canManage={canManage} nextAction={step === currentStep ? nextAction : undefined} />;
+    return <DraftReview session={session} polls={polls} canManage={canManage} nextAction={step === currentStep ? nextAction : undefined} />;
   }
 
   if (step === "scheduled") {
@@ -123,9 +139,21 @@ function SelectedStepPanel({
     ? stepPolls.filter((poll) => poll.id !== selectedPoll.id)
     : [];
   const isCurrent = step === currentStep;
+  const skipped = isSkippedStep(step, currentStep, polls);
   const stepAction = hostActionForStep(session.id, step, polls);
   const actionForEmptyCurrent = stepAction ?? nextAction;
   const rerunAction = rerunActionForStep(session.id, step, stepPolls);
+
+  if (skipped) {
+    return (
+      <Card className="border-zinc-200 bg-zinc-50">
+        <h3 className="text-lg font-semibold text-zinc-950">{workflowSteps.find((item) => item.id === step)?.label} Skipped</h3>
+        <p className="mt-1 text-sm text-zinc-600">
+          The host moved past this optional step. This step is locked for this run.
+        </p>
+      </Card>
+    );
+  }
 
   if (selectedPoll) {
     const showStepActions = canManage && selectedPoll.status === "closed" && step !== "availability";
@@ -134,6 +162,8 @@ function SelectedStepPanel({
         <PollWorkflowCard poll={selectedPoll} canManage={canManage && isCurrent} />
         {showStepActions ? (
           <StepActionCard
+            sessionId={session.id}
+            step={step}
             nextAction={isCurrent ? actionForEmptyCurrent : undefined}
             rerunAction={rerunAction}
           />
@@ -185,10 +215,15 @@ function SelectedStepPanel({
             ? "No poll is active yet. Check back after the host creates one."
             : "This step has not happened yet."}
       </p>
-      {isCurrent && canManage && actionForEmptyCurrent ? (
-        <ButtonLink href={actionForEmptyCurrent.href} tone="primary" className="mt-4 w-full sm:w-auto">
-          {actionForEmptyCurrent.label}
-        </ButtonLink>
+      {canManage ? (
+        <div className="mt-4">
+          <StepLaunchActions
+            sessionId={session.id}
+            step={step}
+            primaryAction={isCurrent ? actionForEmptyCurrent : stepAction}
+            polls={polls}
+          />
+        </div>
       ) : null}
     </Card>
   );
@@ -243,15 +278,22 @@ function workflowAction(
     heading,
     description,
     emptyText,
+    confirmMessage: label.toLowerCase().includes("skip")
+      ? "Skip this optional step and move forward?"
+      : label.toLowerCase().includes("again")
+        ? "Run this step again? The newest poll will become the result for this step."
+        : undefined,
   };
 }
 
 function DraftReview({
   session,
+  polls,
   canManage,
   nextAction,
 }: {
   session: Session;
+  polls: Poll[];
   canManage: boolean;
   nextAction?: WorkflowAction;
 }) {
@@ -265,20 +307,82 @@ function DraftReview({
           </p>
         </div>
         {canManage && !["cancelled", "completed"].includes(session.status) ? (
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-44">
-            {nextAction ? (
-              <ButtonLink href={nextAction.href} tone="primary" className="w-full">
-                {nextAction.label}
-              </ButtonLink>
-            ) : null}
-            <ButtonLink href={`/sessions/${session.id}/edit`} className="w-full">
-              Edit Details
-            </ButtonLink>
-          </div>
+          <ButtonLink href={`/sessions/${session.id}/edit`} className="w-full sm:w-auto">
+            Edit Details
+          </ButtonLink>
         ) : null}
       </div>
+      {canManage && !["cancelled", "completed"].includes(session.status) ? (
+        <div className="mt-4">
+          <StepLaunchActions sessionId={session.id} step="draft" primaryAction={nextAction} polls={polls} />
+        </div>
+      ) : null}
     </Card>
   );
+}
+
+function StepLaunchActions({
+  sessionId,
+  step,
+  primaryAction,
+  polls,
+}: {
+  sessionId: string;
+  step: WorkflowStep;
+  primaryAction?: WorkflowAction;
+  polls: Poll[];
+}) {
+  const activeOrDraft = polls.some((poll) => poll.status === "active" || poll.status === "draft");
+  if (activeOrDraft) return null;
+  const actions = actionsForStep(sessionId, step);
+  const primaryHref = primaryAction?.href;
+  const visibleActions = actions.filter((action) => action.href !== primaryHref);
+  return (
+    <div className="flex flex-wrap gap-2">
+      {primaryAction ? (
+        <ActionLink action={primaryAction} tone="primary" className="w-full sm:w-auto" />
+      ) : null}
+      {visibleActions.map((action) => (
+        <ActionLink key={action.href} action={action} className="w-full sm:w-auto" />
+      ))}
+    </div>
+  );
+}
+
+function actionsForStep(sessionId: string, step: WorkflowStep): StepLinkAction[] {
+  if (step === "draft") {
+    return [
+      { href: `/sessions/${sessionId}/polls/new?type=interest`, label: "Start Interest" },
+      { href: `/sessions/${sessionId}/polls/new?type=topic`, label: "Skip to Topic" },
+      { href: `/sessions/${sessionId}/polls/new?type=availability`, label: "Skip to Availability" },
+      { href: `/sessions/${sessionId}/polls/new?type=final_timing`, label: "Skip to Timing" },
+    ];
+  }
+  if (step === "interest") {
+    return [
+      { href: `/sessions/${sessionId}/polls/new?type=interest`, label: "Run Interest" },
+      { href: `/sessions/${sessionId}/polls/new?type=topic`, label: "Skip to Topic" },
+      { href: `/sessions/${sessionId}/polls/new?type=availability`, label: "Skip to Availability" },
+      { href: `/sessions/${sessionId}/polls/new?type=final_timing`, label: "Skip to Timing" },
+    ];
+  }
+  if (step === "topic") {
+    return [
+      { href: `/sessions/${sessionId}/polls/new?type=topic`, label: "Run Topic" },
+      { href: `/sessions/${sessionId}/polls/new?type=availability`, label: "Skip to Availability" },
+      { href: `/sessions/${sessionId}/polls/new?type=final_timing`, label: "Skip to Timing" },
+    ];
+  }
+  if (step === "availability") {
+    return [
+      { href: `/sessions/${sessionId}/polls/new?type=availability`, label: "Run Availability" },
+      { href: `/sessions/${sessionId}/polls/new?type=final_timing`, label: "Skip to Timing" },
+    ];
+  }
+  if (step === "timing") {
+    return [{ href: `/sessions/${sessionId}/polls/new?type=final_timing`, label: "Run Timing" }];
+  }
+  return [];
 }
 
 function ScheduledReview({ session, canManage }: { session: Session; canManage: boolean }) {
@@ -304,15 +408,27 @@ function ScheduledReview({ session, canManage }: { session: Session; canManage: 
       ) : null}
       {canManage ? (
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <ButtonLink href={`/sessions/${session.id}/polls/new?type=availability`} className="w-full sm:w-auto">
+          <ConfirmLink
+            href={`/sessions/${session.id}/polls/new?type=availability`}
+            className="w-full sm:w-auto"
+            confirm={{ title: "Collect availability again?", message: "This starts a fresh availability step and the latest results will be used moving forward.", confirmLabel: "Start again" }}
+          >
             Collect Availability Again
-          </ButtonLink>
-          <ButtonLink href={`/sessions/${session.id}/polls/new?type=final_timing`} className="w-full sm:w-auto">
+          </ConfirmLink>
+          <ConfirmLink
+            href={`/sessions/${session.id}/polls/new?type=final_timing`}
+            className="w-full sm:w-auto"
+            confirm={{ title: "Run timing again?", message: "This starts a fresh final timing poll. Only the latest timing result can schedule the session.", confirmLabel: "Run again" }}
+          >
             Run Timing Again
-          </ButtonLink>
-          <ButtonLink href={`/sessions/${session.id}/reschedule`} className="w-full sm:w-auto">
+          </ConfirmLink>
+          <ConfirmLink
+            href={`/sessions/${session.id}/reschedule`}
+            className="w-full sm:w-auto"
+            confirm={{ title: "Pick a manual time?", message: "You will choose the final session time manually instead of using a poll result.", confirmLabel: "Choose time" }}
+          >
             Pick Time Manually
-          </ButtonLink>
+          </ConfirmLink>
         </div>
       ) : null}
     </Card>
@@ -320,37 +436,65 @@ function ScheduledReview({ session, canManage }: { session: Session; canManage: 
 }
 
 function StepActionCard({
+  sessionId,
+  step,
   nextAction,
   rerunAction,
 }: {
+  sessionId: string;
+  step: WorkflowStep;
   nextAction?: WorkflowAction;
   rerunAction?: WorkflowAction;
 }) {
-  if (!nextAction && !rerunAction) return null;
+  const skipActions = skipActionsForStep(sessionId, step).filter((action) => action.href !== nextAction?.href);
+  if (!nextAction && !rerunAction && !skipActions.length) return null;
   return (
     <Card>
       <div className="grid gap-3 md:grid-cols-2">
         {nextAction ? (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5">
             <h3 className="text-base font-semibold text-emerald-950">{nextAction.heading}</h3>
             <p className="mt-1 text-sm text-emerald-800">{nextAction.description}</p>
-            <ButtonLink href={nextAction.href} tone="primary" className="mt-4 w-full">
-              {nextAction.label}
-            </ButtonLink>
+            <ActionLink action={nextAction} tone="primary" className="mt-4 w-full" />
           </div>
         ) : null}
         {rerunAction ? (
-          <div className="rounded-lg border border-zinc-200 bg-white p-4">
+          <div className="rounded-lg border border-zinc-200 bg-white p-5">
             <h3 className="text-base font-semibold text-zinc-950">{rerunAction.heading}</h3>
             <p className="mt-1 text-sm text-zinc-600">{rerunAction.description}</p>
-            <ButtonLink href={rerunAction.href} className="mt-4 w-full">
-              {rerunAction.label}
-            </ButtonLink>
+            <ActionLink action={rerunAction} className="mt-4 w-full" />
           </div>
         ) : null}
       </div>
+      {skipActions.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {skipActions.map((action) => (
+            <ActionLink key={action.href} action={action} className="w-full sm:w-auto" />
+          ))}
+        </div>
+      ) : null}
     </Card>
   );
+}
+
+function skipActionsForStep(sessionId: string, step: WorkflowStep): StepLinkAction[] {
+  if (step === "interest") {
+    return [
+      { href: `/sessions/${sessionId}/polls/new?type=topic`, label: "Skip to Topic", confirmMessage: "Skip interest and move to topic selection?" },
+      { href: `/sessions/${sessionId}/polls/new?type=availability`, label: "Skip to Availability", confirmMessage: "Skip interest/topic and move to availability?" },
+      { href: `/sessions/${sessionId}/polls/new?type=final_timing`, label: "Skip to Timing", confirmMessage: "Skip optional planning steps and move straight to the final timing vote?" },
+    ];
+  }
+  if (step === "topic") {
+    return [
+      { href: `/sessions/${sessionId}/polls/new?type=availability`, label: "Skip to Availability", confirmMessage: "Skip topic selection and move to availability?" },
+      { href: `/sessions/${sessionId}/polls/new?type=final_timing`, label: "Skip to Timing", confirmMessage: "Skip topic/availability and move straight to the final timing vote?" },
+    ];
+  }
+  if (step === "availability") {
+    return [{ href: `/sessions/${sessionId}/polls/new?type=final_timing`, label: "Skip to Timing", confirmMessage: "Skip availability and move to the final timing vote?" }];
+  }
+  return [];
 }
 
 function PreviousPolls({ polls, canManage }: { polls: Poll[]; canManage: boolean }) {
@@ -388,7 +532,9 @@ function stepStatus(
 ) {
   if (session.status === "cancelled") return index <= currentIndex ? "error" as const : "wait" as const;
   if (step === "scheduled" && session.scheduledStartTime) return "finish" as const;
-  if (index < currentIndex) return "finish" as const;
+  if (index < currentIndex) {
+    return isOptionalWorkflowStep(step) && !pollsForStep(polls, step).length ? "skipped" as const : "finish" as const;
+  }
   if (index === currentIndex) return "process" as const;
   if (pollsForStep(polls, step).some((poll) => poll.status === "closed" || poll.status === "superseded")) {
     return "finish" as const;
@@ -399,6 +545,7 @@ function stepStatus(
 function stepButtonTone(status: ReturnType<typeof stepStatus>, selected: boolean) {
   if (selected) return "border-zinc-950 bg-zinc-950 text-white shadow-sm";
   if (status === "finish") return "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300";
+  if (status === "skipped") return "border-zinc-200 bg-zinc-100 text-zinc-500 hover:border-zinc-300";
   if (status === "process") return "border-blue-200 bg-blue-50 text-blue-800 hover:border-blue-300";
   if (status === "error") return "border-rose-200 bg-rose-50 text-rose-800";
   return "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-700";
@@ -407,9 +554,53 @@ function stepButtonTone(status: ReturnType<typeof stepStatus>, selected: boolean
 function stepCircleTone(status: ReturnType<typeof stepStatus>, selected: boolean) {
   if (selected) return "bg-white text-zinc-950";
   if (status === "finish") return "bg-emerald-100 text-emerald-700";
+  if (status === "skipped") return "bg-zinc-200 text-zinc-500";
   if (status === "process") return "bg-blue-600 text-white";
   if (status === "error") return "bg-rose-100 text-rose-700";
   return "bg-zinc-100 text-zinc-600";
+}
+
+function isSkippedStep(step: WorkflowStep, currentStep: WorkflowStep, polls: Poll[]) {
+  const stepIndex = workflowSteps.findIndex((item) => item.id === step);
+  const currentIndex = workflowSteps.findIndex((item) => item.id === currentStep);
+  return stepIndex < currentIndex && isOptionalWorkflowStep(step) && !pollsForStep(polls, step).length;
+}
+
+function isOptionalWorkflowStep(step: WorkflowStep) {
+  return step === "interest" || step === "topic" || step === "availability";
+}
+
+function ActionLink({
+  action,
+  tone = "secondary",
+  className = "",
+}: {
+  action: Pick<WorkflowAction, "href" | "label" | "confirmMessage">;
+  tone?: "primary" | "secondary";
+  className?: string;
+}) {
+  if (!action.confirmMessage) {
+    return (
+      <ButtonLink href={action.href} tone={tone} className={className}>
+        {action.label}
+      </ButtonLink>
+    );
+  }
+
+  return (
+    <ConfirmLink
+      href={action.href}
+      tone={tone}
+      className={className}
+      confirm={{
+        title: action.label,
+        message: action.confirmMessage,
+        confirmLabel: action.label,
+      }}
+    >
+      {action.label}
+    </ConfirmLink>
+  );
 }
 
 function pollsForStep(polls: Poll[], step: WorkflowStep) {

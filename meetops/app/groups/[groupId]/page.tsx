@@ -37,13 +37,18 @@ export default async function GroupDetailPage({
 
   return (
     <AuthenticatedPage>
-      <div className="space-y-6">
+      <div className="space-y-5">
         <PageHeader
           title={group.name}
-          subtitle={`${group.description ?? "Private group sessions and polls."} ${memberCount} ${memberCount === 1 ? "member" : "members"} · You are ${role === "admin" ? "Admin" : "Member"}`}
+          subtitle={group.description ?? "Private group sessions and polls."}
           badge={<RoleBadge role={role} />}
           primaryAction={<ButtonLink href={`/groups/${group.group_id}/sessions/new`} tone="primary">Host Session</ButtonLink>}
         />
+        <div className="flex flex-wrap gap-2">
+          <MetaChip label="Members" value={String(memberCount)} />
+          <MetaChip label="Invite" value={group.invite_enabled ? "Enabled" : "Disabled"} />
+          <MetaChip label="Meet owner" value={owner?.email ?? "Host fallback"} />
+        </div>
         <div className="flex gap-2 border-b border-zinc-200 text-sm">
           <Tab href={`/groups/${group.group_id}`} active>Sessions</Tab>
           <Tab href={`/groups/${group.group_id}/members`}>Members</Tab>
@@ -51,20 +56,24 @@ export default async function GroupDetailPage({
             <Tab href={`/groups/${group.group_id}/settings`}>Settings</Tab>
           ) : null}
         </div>
-        <div className="grid gap-6 lg:grid-cols-[1.8fr_1fr]">
-          <div className="space-y-6">
+        <div className="space-y-5">
+          <section>
+            <SectionTitle
+              title="Active polls"
+              subtitle="Open votes and availability checks that need member input."
+              action={<RealtimeSessionRefresh enabled={liveEnabled} intervalMs={1000} />}
+            />
+            <div className="space-y-3">
+              {activePolls.length ? activePolls.map((poll) => (
+                <PollCard key={poll.id} poll={poll} />
+              )) : (
+                <EmptyPanel text="No open polls." />
+              )}
+            </div>
+          </section>
+          <div className="grid gap-5 lg:grid-cols-2">
             <section>
-              <SectionTitle title="Upcoming Sessions" subtitle="Only scheduled future sessions appear here." />
-              <div className="space-y-3">
-                {upcomingSessions.length ? upcomingSessions.map((session) => (
-                  <SessionCard key={session.id} session={session} />
-                )) : (
-                  <EmptyPanel text="No scheduled future sessions." />
-                )}
-              </div>
-            </section>
-            <section>
-              <SectionTitle title="Planning Now" subtitle="Drafts, polls, host decisions, and scheduling work." />
+              <SectionTitle title="Planning" subtitle="Drafts, polls, host decisions, and scheduling work." />
               <div className="space-y-3">
                 {activePlanningSessions.length ? activePlanningSessions.map((session) => (
                   <SessionCard key={session.id} session={session} />
@@ -74,49 +83,16 @@ export default async function GroupDetailPage({
               </div>
             </section>
             <section>
-              <SectionTitle
-                title="Active polls"
-                action={<RealtimeSessionRefresh enabled={liveEnabled} />}
-              />
+              <SectionTitle title="Scheduled" subtitle="Confirmed upcoming sessions." />
               <div className="space-y-3">
-                {activePolls.length ? activePolls.map((poll) => (
-                  <PollCard key={poll.id} poll={poll} />
+                {upcomingSessions.length ? upcomingSessions.map((session) => (
+                  <SessionCard key={session.id} session={session} />
                 )) : (
-                  <EmptyPanel text="No open polls." />
+                  <EmptyPanel text="No scheduled future sessions." />
                 )}
               </div>
             </section>
           </div>
-          <aside className="space-y-4">
-            <Card>
-              <SectionTitle title="Group info" />
-              <Info
-                label="Members"
-                value={`${memberCount} ${memberCount === 1 ? "person" : "people"} in this group.`}
-              />
-              <Info label="Current role" value={role === "admin" ? "Admin" : "Member"} />
-              <Info label="Invite status" value={group.invite_enabled ? "Enabled" : "Disabled"} />
-            </Card>
-            <Card>
-              <SectionTitle title="Meeting owner" />
-              <Info label="Account" value={owner?.email ?? "Fallback to host"} />
-              <Info label="Calendar" value={owner?.calendar_events_scope_granted ? "Calendar connected" : "Needs reconnect"} />
-            </Card>
-            {role === "admin" ? (
-              <Card>
-                <SectionTitle title="Invite code" />
-                <Info label="Code" value={group.invite_code ?? "Disabled"} />
-                <Info label="Usage" value={`${group.invite_used_count} / ${group.invite_max_uses} used`} />
-              </Card>
-            ) : null}
-            <Card>
-              <SectionTitle title="Quick actions" />
-              <div className="space-y-2">
-                <ButtonLink href={`/groups/${group.group_id}/sessions/new`} tone="primary" className="w-full">Host Session</ButtonLink>
-                <ButtonLink href="/groups/join" className="w-full">Join another group</ButtonLink>
-              </div>
-            </Card>
-          </aside>
         </div>
       </div>
     </AuthenticatedPage>
@@ -128,6 +104,15 @@ function EmptyPanel({ text }: { text: string }) {
     <Card>
       <p className="text-sm text-zinc-600">{text}</p>
     </Card>
+  );
+}
+
+function MetaChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-full border border-zinc-200 bg-white/80 px-3 py-1.5 text-sm shadow-sm">
+      <span className="text-zinc-500">{label}: </span>
+      <span className="font-medium text-zinc-900">{value}</span>
+    </div>
   );
 }
 
@@ -166,14 +151,5 @@ function Tab({
     >
       {children}
     </ButtonLink>
-  );
-}
-
-function Info({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="border-t border-zinc-100 py-3 first:border-t-0 first:pt-0">
-      <div className="text-xs font-medium uppercase text-zinc-500">{label}</div>
-      <div className="mt-1 text-sm text-zinc-900">{value}</div>
-    </div>
   );
 }

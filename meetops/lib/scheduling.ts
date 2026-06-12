@@ -109,12 +109,13 @@ export async function scheduleSession(input: ScheduleSessionInput): Promise<Sche
       include: { group: true },
     });
     const attendees = await selectCalendarAttendees(session);
+    const eventTitle = session.topic ?? resolved.label ?? "TechUp Session";
     const event = await upsertCalendarEvent({
       accessToken: owner.accessToken,
       calendarId: session.googleCalendarId,
       eventId: session.calendarEventId,
-      summary: `TechUp Session: ${session.topic ?? resolved.label ?? "Session"}`,
-      description: session.description ?? "",
+      summary: `TechUp Session: ${eventTitle}`,
+      description: calendarEventDescription(eventTitle, session.description),
       startAt: resolved.startAt,
       endAt: resolved.endAt,
       attendeeEmails: attendees,
@@ -470,6 +471,14 @@ async function interestedMemberEmails(sessionId: bigint) {
 
 function uniqueEmails(emails: string[]) {
   return [...new Map(emails.map((email) => [email.toLowerCase(), email])).values()];
+}
+
+function calendarEventDescription(title: string, description: string | null) {
+  const lines = [`Title: ${title}`];
+  if (description?.trim()) {
+    lines.push("", "Description:", description.trim());
+  }
+  return lines.join("\n");
 }
 
 async function upsertCalendarEvent({

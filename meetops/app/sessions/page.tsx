@@ -3,6 +3,7 @@ import { ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { EmptyState } from "@/components/common/States";
+import { RealtimeSessionRefresh } from "@/components/sessions/RealtimeSessionRefresh";
 import { SessionCard } from "@/components/sessions/SessionCard";
 import { getAllUserSessions, getCurrentUser } from "@/lib/web-api";
 import type { Session } from "@/types/domain";
@@ -47,6 +48,7 @@ export async function SessionsList({
         <PageHeader
           title={title}
           subtitle={subtitle}
+          badge={<RealtimeSessionRefresh enabled intervalMs={3000} />}
           primaryAction={<ButtonLink href="/groups" tone="primary">Host from Group</ButtonLink>}
         />
         <Card>

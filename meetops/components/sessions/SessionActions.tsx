@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ButtonLink } from "@/components/common/Buttons";
+import { ConfirmButton } from "@/components/common/ConfirmAction";
 import type { Session } from "@/types/domain";
 
 export function SessionActions({
@@ -54,20 +55,30 @@ export function SessionActions({
       ) : null}
       {session.status === "scheduled" ? (
         <>
-          <Button
+          <ConfirmButton
             className="w-full"
             disabled={pending === "complete"}
-            onClick={() => post(`/api/v1/sessions/${session.id}/complete`, "complete session")}
+            onConfirm={() => void post(`/api/v1/sessions/${session.id}/complete`, "complete session")}
+            confirm={{
+              title: "Mark session completed?",
+              message: "This moves the session out of the active workflow.",
+              confirmLabel: "Mark completed",
+            }}
           >
             Mark as Completed
-          </Button>
-          <Button
+          </ConfirmButton>
+          <ConfirmButton
             className="w-full"
             disabled={pending === "reschedule"}
-            onClick={() => post(`/api/v1/sessions/${session.id}/reschedule`, "reschedule")}
+            onConfirm={() => void post(`/api/v1/sessions/${session.id}/reschedule`, "reschedule")}
+            confirm={{
+              title: "Change scheduled time?",
+              message: "This moves the scheduled session back into rescheduling so the host can choose a new time.",
+              confirmLabel: "Change time",
+            }}
           >
             Change Time
-          </Button>
+          </ConfirmButton>
         </>
       ) : null}
       {!["cancelled", "completed", "scheduled"].includes(session.status) ? (
@@ -76,14 +87,20 @@ export function SessionActions({
         </ButtonLink>
       ) : null}
       {!["cancelled", "completed", "scheduling"].includes(session.status) ? (
-        <Button
+        <ConfirmButton
           tone="danger"
           className="w-full"
           disabled={pending === "cancel"}
-          onClick={() => post(`/api/v1/sessions/${session.id}/cancel`, "cancel session")}
+          onConfirm={() => void post(`/api/v1/sessions/${session.id}/cancel`, "cancel session")}
+          confirm={{
+            title: "Cancel session?",
+            message: "This cancels the session for everyone. Any linked calendar event will be cancelled too.",
+            confirmLabel: "Cancel session",
+            cancelLabel: "Keep session",
+          }}
         >
           Cancel
-        </Button>
+        </ConfirmButton>
       ) : null}
       {message ? <p className="text-sm text-rose-700">{message}</p> : null}
     </div>

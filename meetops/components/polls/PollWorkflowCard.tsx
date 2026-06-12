@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PollStatusBadge } from "@/components/common/Badge";
 import { Button, ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
+import { ConfirmButton } from "@/components/common/ConfirmAction";
 import { pollTypeLabels } from "@/lib/labels";
 import type { Poll, PollOption } from "@/types/domain";
 
@@ -59,17 +60,29 @@ function AvailabilityPollCard({ poll, canManage }: { poll: Poll; canManage: bool
           poll={poll}
         />
         {canManage && poll.status === "active" ? (
-          <Button type="button" tone="primary" disabled={pending === "close"} onClick={closePoll}>
+          <ConfirmButton
+            tone="primary"
+            disabled={pending === "close"}
+            onConfirm={() => void closePoll()}
+            confirm={{
+              title: "Close availability poll?",
+              message: "Members will stop being able to update availability. The host can review results and create the final timing vote.",
+              confirmLabel: "Close poll",
+            }}
+          >
             {pending === "close" ? "Closing..." : "Close Poll"}
-          </Button>
+          </ConfirmButton>
         ) : null}
       </div>
 
       <div className="mt-4 space-y-3">
-        {canManage || poll.status !== "active" ? (
-          poll.options.map((option) => (
-            <WindowRow key={option.id} option={option} />
-          ))
+        {canManage && poll.status === "active" ? (
+          <>
+            <AvailabilityLiveSummary options={rankedOptions} />
+            <RankedResults options={rankedOptions} emptyText="No availability responses yet." />
+          </>
+        ) : canManage || poll.status !== "active" ? (
+          poll.options.map((option) => <WindowRow key={option.id} option={option} />)
         ) : (
           <AvailabilityResponseForm poll={poll} />
         )}
@@ -77,6 +90,30 @@ function AvailabilityPollCard({ poll, canManage }: { poll: Poll; canManage: bool
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
       {canManage && poll.status === "draft" ? <DraftControls poll={poll} pending={pending} setPending={setPending} setMessage={setMessage} /> : null}
     </Card>
+  );
+}
+
+function AvailabilityLiveSummary({ options }: { options: PollOption[] }) {
+  const topVoteCount = options[0]?.voteCount ?? 0;
+  const best = topVoteCount > 0 ? options.filter((option) => option.voteCount === topVoteCount) : [];
+  return (
+    <div className="rounded-lg border border-teal-200 bg-teal-50/80 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-teal-800">Current best</div>
+          {best.length ? (
+            <div className="mt-1 text-sm font-medium text-teal-950">
+              {best.length > 1 ? `${best.length} times tied` : `${formatDay(best[0].startAt)} · ${formatTimeRange(best[0].startAt, best[0].endAt)}`}
+            </div>
+          ) : (
+            <div className="mt-1 text-sm font-medium text-teal-950">Waiting for availability</div>
+          )}
+        </div>
+        <span className="rounded-full border border-teal-200 bg-white px-2.5 py-1 text-xs font-medium text-teal-800">
+          {topVoteCount} {topVoteCount === 1 ? "person" : "people"}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -129,22 +166,38 @@ function FinalTimingPollCard({ poll, canManage }: { poll: Poll; canManage: boole
           poll={poll}
         />
         {canManage && poll.status === "active" ? (
-          <Button type="button" tone="primary" disabled={pending === "close"} onClick={closePoll}>
+          <ConfirmButton
+            tone="primary"
+            disabled={pending === "close"}
+            onConfirm={() => void closePoll()}
+            confirm={{
+              title: "Close and schedule?",
+              message: "This closes the final timing vote. If there is a clear winner, the session will be scheduled from that result.",
+              confirmLabel: "Close and schedule",
+            }}
+          >
             {pending === "close" ? "Closing..." : "Close & Schedule"}
-          </Button>
+          </ConfirmButton>
         ) : null}
       </div>
 
       <div className="mt-4 space-y-3">
-        {poll.options.map((option) => (
-          <FinalTimingOptionRadioRow
-            key={option.id}
-            option={option}
-            checked={selected.includes(option.id)}
-            disabled={canManage || poll.status !== "active" || pending === "vote"}
-            onSelect={() => setSelected([option.id])}
-          />
-        ))}
+        {canManage && poll.status === "active" ? (
+          <>
+            <FinalTimingLiveSummary options={ranked(poll.options)} />
+            <RankedResults options={ranked(poll.options)} emptyText="No final timing votes yet." />
+          </>
+        ) : (
+          poll.options.map((option) => (
+            <FinalTimingOptionRadioRow
+              key={option.id}
+              option={option}
+              checked={selected.includes(option.id)}
+              disabled={canManage || poll.status !== "active" || pending === "vote"}
+              onSelect={() => setSelected([option.id])}
+            />
+          ))
+        )}
       </div>
 
       {!canManage && poll.status === "active" ? (
@@ -192,43 +245,81 @@ function StandardPollCard({ poll, canManage }: { poll: Poll; canManage: boolean 
   }
 
   const showResults = poll.resultsVisible || poll.status !== "active" || canManage;
+  const resultOnly = showResults && (canManage || poll.status !== "active");
 
   return (
     <Card>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PollHeading title={pollTypeLabels[poll.type]} subtitle={poll.type === "topic" ? "Choose or suggest a topic." : undefined} poll={poll} />
         {canManage && poll.status === "active" ? (
-          <Button type="button" tone="primary" disabled={pending === "close"} onClick={closePoll}>
+          <ConfirmButton
+            tone="primary"
+            disabled={pending === "close"}
+            onConfirm={() => void closePoll()}
+            confirm={{
+              title: "Close poll?",
+              message: "Members will stop being able to vote. Results will remain visible for review.",
+              confirmLabel: "Close poll",
+            }}
+          >
             {pending === "close" ? "Closing..." : "Close Poll"}
-          </Button>
+          </ConfirmButton>
         ) : null}
       </div>
 
       <div className="mt-4 space-y-2">
-        {poll.options.map((option) => {
-          const checked = selected.includes(option.id);
-          return (
-            <OptionVoteRow
-              key={option.id}
-              option={option}
-              checked={checked}
-              multiChoice={poll.multiChoice}
-              disabled={canManage || poll.status !== "active" || pending === "vote"}
-              showResults={showResults}
-              totalVotes={totalVotes(poll.options)}
-              onClick={() => {
-                const next = poll.multiChoice ? toggleMulti(selected, option.id) : [option.id];
-                setSelected(next);
-                if (!canManage && poll.status === "active") void submitVote(next);
-              }}
-            />
-          );
-        })}
+        {resultOnly ? (
+          <CompactResults options={poll.options} emptyText="No votes yet." />
+        ) : (
+          poll.options.map((option) => {
+            const checked = selected.includes(option.id);
+            return (
+              <OptionVoteRow
+                key={option.id}
+                option={option}
+                checked={checked}
+                multiChoice={poll.multiChoice}
+                disabled={canManage || poll.status !== "active" || pending === "vote"}
+                showResults={showResults}
+                totalVotes={totalVotes(poll.options)}
+                onClick={() => {
+                  const next = poll.multiChoice ? toggleMulti(selected, option.id) : [option.id];
+                  setSelected(next);
+                  if (!canManage && poll.status === "active") void submitVote(next);
+                }}
+              />
+            );
+          })
+        )}
       </div>
 
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
       {canManage && poll.status === "draft" ? <DraftControls poll={poll} pending={pending} setPending={setPending} setMessage={setMessage} /> : null}
     </Card>
+  );
+}
+
+function FinalTimingLiveSummary({ options }: { options: PollOption[] }) {
+  const topVoteCount = options[0]?.voteCount ?? 0;
+  const leaders = topVoteCount > 0 ? options.filter((option) => option.voteCount === topVoteCount) : [];
+  return (
+    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-blue-800">Current leader</div>
+          <div className="mt-1 text-sm font-medium text-blue-950">
+            {leaders.length === 0
+              ? "Waiting for votes"
+              : leaders.length > 1
+                ? `${leaders.length} times tied`
+                : `${formatDay(leaders[0].startAt)} · ${formatTimeRange(leaders[0].startAt, leaders[0].endAt)}`}
+          </div>
+        </div>
+        <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-800">
+          {topVoteCount} {topVoteCount === 1 ? "vote" : "votes"}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -480,6 +571,33 @@ function OptionVoteRow({
         </div>
       </div>
     </button>
+  );
+}
+
+function CompactResults({ options, emptyText }: { options: PollOption[]; emptyText: string }) {
+  if (!options.some((option) => option.voteCount > 0)) {
+    return <p className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">{emptyText}</p>;
+  }
+  const votesTotal = totalVotes(options);
+  return (
+    <div className="space-y-2">
+      {ranked(options).map((option) => {
+        const percent = votesTotal ? Math.round((option.voteCount / votesTotal) * 100) : 0;
+        return (
+          <div key={option.id} className="rounded-lg border border-zinc-200 bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 font-medium text-zinc-950">{option.label}</div>
+              <div className="shrink-0 text-sm text-zinc-500">
+                {option.voteCount} {option.voteCount === 1 ? "vote" : "votes"} · {percent}%
+              </div>
+            </div>
+            <div className="mt-2 h-2 rounded-full bg-zinc-100">
+              <div className="h-2 rounded-full bg-zinc-900" style={{ width: `${percent}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

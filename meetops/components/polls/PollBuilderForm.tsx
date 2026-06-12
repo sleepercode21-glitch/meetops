@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/common/Buttons";
+import { ConfirmButton } from "@/components/common/ConfirmAction";
 import type { PollType } from "@/types/domain";
 
 type DraftOption = {
@@ -50,6 +51,8 @@ export function PollBuilderForm({
   const [error, setError] = useState<string | null>(null);
   const timeBased = pollType === "availability" || pollType === "final_timing";
   const fixedInterest = pollType === "interest";
+  const lockedVoting = pollType === "interest" || pollType === "availability" || pollType === "final_timing";
+  const effectiveMultiChoice = pollType === "availability" ? true : pollType === "topic" ? multiChoice : false;
   const activeOptions = options.filter((option) => !option.deleted);
 
   function changePollType(nextType: PollType) {
@@ -73,6 +76,18 @@ export function PollBuilderForm({
     );
   }
 
+  function updateStartTime(index: number, startAt: string) {
+    setOptions((current) =>
+      current.map((option, optionIndex) => {
+        if (optionIndex !== index) return option;
+        const nextEnd = !option.end_at || option.end_at <= startAt
+          ? addMinutesToLocalDateTime(startAt, 60)
+          : option.end_at;
+        return { ...option, start_at: startAt, end_at: nextEnd };
+      }),
+    );
+  }
+
   function removeOption(index: number) {
     setOptions((current) => {
       const next = current.map((item, itemIndex) =>
@@ -92,6 +107,10 @@ export function PollBuilderForm({
         throw new Error("Set a future deadline before publishing so members have time to vote.");
       }
       if (timeBased) {
+        const firstInvalid = options.find((option) => !option.deleted && !isBlankDraftOption(option, timeBased) && timeOptionError(option, minimumDeadline));
+        if (firstInvalid) {
+          throw new Error(timeOptionError(firstInvalid, minimumDeadline) ?? "Fix the invalid time option.");
+        }
         const validTimeOptions = options.filter((option) => (
           !option.deleted &&
           !isBlankDraftOption(option, timeBased) &&
@@ -102,14 +121,6 @@ export function PollBuilderForm({
         ));
         if (publish && validTimeOptions.length < 1) {
           throw new Error("Publishing requires at least one valid future time option.");
-        }
-        const invalidOption = options.some((option) => (
-          !option.deleted &&
-          !isBlankDraftOption(option, timeBased) &&
-          (!option.start_at || !option.end_at || option.start_at < minimumDeadline || option.end_at <= option.start_at)
-        ));
-        if (invalidOption) {
-          throw new Error("Time options must start in the future and end after they start.");
         }
       }
       const pollId = existingPoll?.id ?? await createPoll();
@@ -146,7 +157,7 @@ export function PollBuilderForm({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         type: pollType,
-        multi_choice: multiChoice,
+        multi_choice: effectiveMultiChoice,
         deadline: deadline ? new Date(deadline).toISOString() : null,
       }),
     });
@@ -160,7 +171,7 @@ export function PollBuilderForm({
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        multi_choice: multiChoice,
+        multi_choice: effectiveMultiChoice,
         deadline: deadline ? new Date(deadline).toISOString() : null,
       }),
     });
@@ -168,7 +179,7 @@ export function PollBuilderForm({
   }
 
   async function createOption(pollId: string, option: DraftOption, index: number) {
-    const label = pollType === "availability" ? "" : option.label || (timeBased ? `Option ${index + 1}` : "");
+    const label = optionLabel(option, timeBased, index, pollType);
     const response = await fetch(`/api/v1/polls/${pollId}/options`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -196,7 +207,7 @@ export function PollBuilderForm({
   }
 
   return (
-    <form className="space-y-5" onSubmit={(event) => event.preventDefault()}>
+    <form className="space-y-4" onSubmit={(event) => event.preventDefault()}>
       <div className="grid gap-2 sm:grid-cols-4">
         {([
           { label: "Interest", type: "interest" },
@@ -206,7 +217,7 @@ export function PollBuilderForm({
         ] as const).map((step, index) => (
           <div
             key={step.type}
-            className={`rounded-md border p-3 text-sm ${
+            className={`rounded-xl border px-4 py-3 text-sm ${
               step.type === pollType
                 ? "border-zinc-950 bg-zinc-950 text-white"
                 : index < pollFlowIndex(pollType)
@@ -214,28 +225,31 @@ export function PollBuilderForm({
                   : "border-zinc-200 bg-zinc-50 text-zinc-500"
             }`}
           >
-            <div className="text-xs font-medium opacity-75">Step {index + 1}</div>
-            <div className="mt-1 font-semibold">{step.label}</div>
+            <div className="font-semibold">{step.label}</div>
           </div>
         ))}
       </div>
 
-      <section className="rounded-md border border-zinc-200 p-4">
-        <div className="mb-3">
-          <div className="text-sm font-semibold text-zinc-950">Next Poll</div>
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-zinc-950">Poll type</div>
+            {!existingPoll ? (
+              <p className="mt-1 text-xs text-zinc-500">
+                Pick the step you want to run now. Interest, topic, and availability are optional.
+              </p>
+            ) : null}
+          </div>
           {!existingPoll ? (
-            <p className="mt-1 text-xs text-zinc-500">
-              This is selected from the current session state. Change it only if you want to skip or repeat a step.
-            </p>
+            <span className="text-xs font-medium text-zinc-500">Timing is required before scheduling.</span>
           ) : null}
         </div>
         <div className="grid gap-3 md:grid-cols-[1fr_auto]">
           <label className="block">
-            <span className="text-sm font-medium">Type</span>
             <select
               value={pollType}
               disabled={Boolean(existingPoll)}
-              className="mt-1 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
+              className="mt-1 min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm"
               onChange={(event) => changePollType(event.target.value as PollType)}
             >
               <option value="interest">Interest check</option>
@@ -244,32 +258,25 @@ export function PollBuilderForm({
               <option value="final_timing">Final timing poll</option>
             </select>
           </label>
-          {!fixedInterest ? <div>
-            <div className="mb-1 text-sm font-medium">Voting</div>
-            <div className="flex gap-2">
-              <label className="rounded-md border border-zinc-200 px-3 py-2 text-sm">
-                <input type="radio" checked={!multiChoice} onChange={() => setMultiChoice(false)} /> Single
-              </label>
-              <label className="rounded-md border border-zinc-200 px-3 py-2 text-sm">
-                <input type="radio" checked={multiChoice} onChange={() => setMultiChoice(true)} /> Multiple
-              </label>
-            </div>
-          </div> : (
-            <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
-              Interest polls use Interested / Maybe.
-            </div>
-          )}
+          {!fixedInterest ? (
+            <VotingControl
+              pollType={pollType}
+              multiChoice={effectiveMultiChoice}
+              locked={lockedVoting}
+              onChange={setMultiChoice}
+            />
+          ) : null}
         </div>
       </section>
 
-      <section className="rounded-md border border-zinc-200 p-4">
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
         <label className="block">
           <span className="text-sm font-semibold text-zinc-950">Deadline</span>
           <input
             type="datetime-local"
             value={deadline}
             min={minimumDeadline}
-            className="mt-2 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
+            className="mt-2 min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm"
             onChange={(event) => setDeadline(event.target.value)}
           />
           <span className="mt-1 block text-xs text-zinc-500">
@@ -278,7 +285,7 @@ export function PollBuilderForm({
         </label>
       </section>
 
-      <section className="rounded-md border border-zinc-200 p-4">
+      {!fixedInterest ? <section className="rounded-xl border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-sm font-semibold text-zinc-950">
             {fixedInterest ? "Interest Options" : timeBased ? "Time Options" : "Official Options"}
@@ -286,46 +293,68 @@ export function PollBuilderForm({
           <div className="text-xs text-zinc-500">{activeOptions.length} option{activeOptions.length === 1 ? "" : "s"}</div>
         </div>
         <div className="space-y-3">
-          {options.map((option, index) => option.deleted ? null : (
-            <div key={option.id ?? index} className="grid gap-2 rounded-md border border-zinc-200 p-3 md:grid-cols-[1fr_auto]">
-              <div className={`grid gap-2 ${pollType === "availability" ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
+          {options.map((option, index) => {
+            if (option.deleted) return null;
+            const rowError = timeBased && !isBlankDraftOption(option, timeBased)
+              ? timeOptionError(option, minimumDeadline)
+              : null;
+            return (
+            <div key={option.id ?? index} className={`rounded-xl border p-3 ${rowError ? "border-rose-300 bg-rose-50/50" : "border-zinc-200 bg-zinc-50/40"}`}>
+              <div className={`grid gap-3 ${pollType === "availability" ? "md:grid-cols-[1fr_1fr_auto]" : "md:grid-cols-[1fr_1fr_1fr_auto]"}`}>
                 {pollType !== "availability" ? (
-                  <input
-                    value={option.label}
-                    disabled={fixedInterest}
-                    className="min-h-10 rounded-md border border-zinc-300 px-3 text-sm"
-                    placeholder={timeBased ? "Label optional" : "Option label"}
-                    onChange={(event) => updateOption(index, { label: event.target.value })}
-                  />
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-zinc-600">Label</span>
+                    <input
+                      value={option.label}
+                      disabled={fixedInterest}
+                      className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm"
+                      placeholder={timeBased ? "Optional label" : "Option label"}
+                      onChange={(event) => updateOption(index, { label: event.target.value })}
+                    />
+                  </label>
                 ) : null}
                 {timeBased ? (
                   <>
                     <label className="block">
                       <span className="mb-1 block text-xs font-medium text-zinc-600">From</span>
-                      <input type="datetime-local" value={option.start_at} min={minimumDeadline} className="min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm" onChange={(event) => updateOption(index, { start_at: event.target.value })} />
+                      <input type="datetime-local" value={option.start_at} min={minimumDeadline} className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm" onChange={(event) => updateStartTime(index, event.target.value)} />
                     </label>
                     <label className="block">
                       <span className="mb-1 block text-xs font-medium text-zinc-600">To</span>
-                      <input type="datetime-local" value={option.end_at} min={option.start_at || minimumDeadline} className="min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm" onChange={(event) => updateOption(index, { end_at: event.target.value })} />
+                      <input type="datetime-local" value={option.end_at} min={option.start_at || minimumDeadline} className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm" onChange={(event) => updateOption(index, { end_at: event.target.value })} />
                     </label>
                   </>
                 ) : null}
+                {!fixedInterest ? (
+                  <ConfirmButton
+                    className="min-h-11 self-end"
+                    onConfirm={() => removeOption(index)}
+                    confirm={{
+                      title: "Remove option?",
+                      message: "This option will be removed from the poll draft.",
+                      confirmLabel: "Remove",
+                    }}
+                  >
+                    Remove
+                  </ConfirmButton>
+                ) : null}
               </div>
-              {!fixedInterest ? <Button
-                type="button"
-                className="min-h-10"
-                onClick={() => removeOption(index)}
-              >
-                Remove
-              </Button> : null}
+              {rowError ? <p className="mt-2 text-sm text-rose-700">{rowError}</p> : null}
             </div>
-          ))}
+          );})}
         </div>
-        {!fixedInterest ? <Button type="button" className="mt-3" onClick={() => setOptions((current) => [...current, { label: "", start_at: "", end_at: "" }])}>
+        <Button type="button" className="mt-3" onClick={() => setOptions((current) => [...current, { label: "", start_at: "", end_at: "" }])}>
           {timeBased ? "Add Time Option" : "Add Option"}
-        </Button> : null}
-      </section>
-      {error ? <p className="text-sm text-rose-700">{error}</p> : null}
+        </Button>
+      </section> : (
+        <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <h2 className="text-sm font-semibold text-emerald-950">Interest check</h2>
+          <p className="mt-1 text-sm text-emerald-800">
+            Members will tap Interested or Maybe. No setup needed.
+          </p>
+        </section>
+      )}
+      {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
       <div className="flex gap-2">
         <Button type="button" disabled={pending === "draft"} onClick={() => submit(false)}>
           {pending === "draft" ? "Saving..." : "Save Draft"}
@@ -356,12 +385,50 @@ function emptyOptionsForType(type: PollType): DraftOption[] {
   return [{ label: "", start_at: "", end_at: "" }];
 }
 
+function VotingControl({
+  pollType,
+  multiChoice,
+  locked,
+  onChange,
+}: {
+  pollType: PollType;
+  multiChoice: boolean;
+  locked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  if (locked) {
+    const text = pollType === "availability"
+      ? "Availability lets members choose multiple windows."
+      : "Final timing is a single-choice vote.";
+    return (
+      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+        <div className="font-medium text-zinc-900">{multiChoice ? "Multiple choice" : "Single choice"}</div>
+        <div className="mt-0.5 text-xs">{text}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-1 text-sm font-medium">Voting</div>
+      <div className="flex gap-2">
+        <label className="flex min-h-10 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm">
+          <input type="radio" checked={!multiChoice} onChange={() => onChange(false)} /> Single
+        </label>
+        <label className="flex min-h-10 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm">
+          <input type="radio" checked={multiChoice} onChange={() => onChange(true)} /> Multiple
+        </label>
+      </div>
+    </div>
+  );
+}
+
 function pollFlowIndex(type: PollType) {
   return ["interest", "topic", "availability", "final_timing"].indexOf(type);
 }
 
 function optionBody(option: DraftOption, timeBased: boolean, index: number, pollType: PollType) {
-  const label = pollType === "availability" ? "" : option.label || (timeBased ? `Option ${index + 1}` : "");
+  const label = optionLabel(option, timeBased, index, pollType);
   return {
     label,
     start_at: timeBased && option.start_at ? new Date(option.start_at).toISOString() : null,
@@ -369,10 +436,32 @@ function optionBody(option: DraftOption, timeBased: boolean, index: number, poll
   };
 }
 
+function optionLabel(option: DraftOption, timeBased: boolean, index: number, pollType: PollType) {
+  if (pollType === "availability" && option.start_at && option.end_at) {
+    return `${new Date(option.start_at).toISOString()} - ${new Date(option.end_at).toISOString()}`;
+  }
+  return option.label || (timeBased ? `Option ${index + 1}` : "");
+}
+
 function isBlankDraftOption(option: DraftOption, timeBased: boolean) {
   if (option.deleted) return false;
   if (timeBased) return !option.label.trim() && !option.start_at && !option.end_at;
   return !option.label.trim();
+}
+
+function timeOptionError(option: DraftOption, minimumDeadline: string) {
+  if (!option.start_at || !option.end_at) return "Add both a start and end time, or leave the row blank.";
+  if (option.start_at < minimumDeadline) return "Start time must be in the future.";
+  if (option.end_at <= option.start_at) return "End time must be after the start time.";
+  return null;
+}
+
+function addMinutesToLocalDateTime(value: string, minutes: number) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() + minutes * 60_000 - offset).toISOString().slice(0, 16);
 }
 
 function toLocalDateTime(value?: string) {

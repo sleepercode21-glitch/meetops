@@ -32,15 +32,18 @@ export function ButtonLink({
   href,
   tone = "secondary",
   className = "",
+  onClick,
 }: {
   children: React.ReactNode;
   href: string;
   tone?: ButtonTone;
   className?: string;
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
 }) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition ${tones[tone]} ${className}`}
     >
       {children}

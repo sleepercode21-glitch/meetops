@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { AuthenticatedPage } from "@/components/app-shell/AuthenticatedPage";
-import { Card, SectionTitle } from "@/components/common/Card";
+import { Card } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PollBuilderForm } from "@/components/polls/PollBuilderForm";
 import { pollTypeLabels } from "@/lib/labels";
@@ -26,25 +26,15 @@ export async function PollEditorPage({
         <PageHeader
           breadcrumb={`Session / ${session.topic ?? "Untitled session"}`}
           title={title}
-          subtitle={pollId ? "Update this poll and keep the session moving." : "The poll type follows the current session flow. Add options, set a deadline, then open voting."}
+          subtitle={pollId ? "Update this poll and keep the session moving." : "Set the choices, choose a deadline, and open voting."}
         />
-        <div className="grid gap-5 lg:grid-cols-[1.3fr_0.8fr]">
-          <Card>
-            <PollBuilderForm
-              sessionId={sessionId}
-              existingPoll={poll}
-              defaultPollType={defaultPollType}
-            />
-          </Card>
-          <Card>
-            <SectionTitle title="Poll rules" />
-            <div className="space-y-3 text-sm text-zinc-600">
-              <p>Only official options are voteable.</p>
-              <p>Availability and final timing polls require start and end times.</p>
-              <p>Members can vote after the poll is published.</p>
-            </div>
-          </Card>
-        </div>
+        <Card className="max-w-4xl">
+          <PollBuilderForm
+            sessionId={sessionId}
+            existingPoll={poll}
+            defaultPollType={defaultPollType}
+          />
+        </Card>
       </div>
     </AuthenticatedPage>
   );
