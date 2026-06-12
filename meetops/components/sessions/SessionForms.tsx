@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/common/Buttons";
+import type { ApiMember } from "@/lib/web-api";
 
 type ApiErrorBody = {
   error?: {
@@ -10,10 +11,17 @@ type ApiErrorBody = {
   };
 };
 
-export function HostSessionForm({ groupId }: { groupId: string }) {
+export function HostSessionForm({
+  groupId,
+  members,
+}: {
+  groupId: string;
+  members: ApiMember[];
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const calendarReadyMembers = members.filter((member) => member.calendar_events_scope_granted);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,6 +36,7 @@ export function HostSessionForm({ groupId }: { groupId: string }) {
         topic: form.get("topic"),
         description: form.get("description"),
         calendar_invite_policy: form.get("calendar_invite_policy"),
+        meeting_owner: numericOrNull(form.get("meeting_owner")),
       }),
     });
 
@@ -56,6 +65,23 @@ export function HostSessionForm({ groupId }: { groupId: string }) {
         label="Description"
         placeholder="We will discuss metrics, logs, alerts, and dashboards."
       />
+      <label className="block">
+        <span className="text-sm font-medium text-zinc-800">Google Meet account</span>
+        <select
+          name="meeting_owner"
+          className="mt-1 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
+        >
+          <option value="">Use group default, then host</option>
+          {calendarReadyMembers.map((member) => (
+            <option key={member.user_id} value={member.user_id}>
+              {displayMember(member)}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-xs text-zinc-500">
+          This Google account creates the Calendar invite and Meet link.
+        </span>
+      </label>
       <div>
         <div className="mb-2 text-sm font-medium text-zinc-800">
           Calendar invite policy
@@ -163,4 +189,14 @@ function Radio({
 async function errorMessage(response: Response) {
   const body = (await response.json().catch(() => ({}))) as ApiErrorBody;
   return body.error?.message ?? "Could not create session.";
+}
+
+function numericOrNull(value: FormDataEntryValue | null) {
+  if (!value) return null;
+  const number = Number(value);
+  return Number.isInteger(number) ? number : null;
+}
+
+function displayMember(member: ApiMember) {
+  return [member.firstname, member.lastname].filter(Boolean).join(" ") || member.email;
 }

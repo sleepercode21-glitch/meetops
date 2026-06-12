@@ -64,6 +64,7 @@ export async function PATCH(request: NextRequest, context: Context) {
       topic?: unknown;
       description?: unknown;
       calendar_invite_policy?: unknown;
+      meeting_owner?: unknown;
     };
     const topic = optionalString(body.topic, "topic", 100);
     const description = optionalString(body.description, "description", 1000, {
@@ -74,6 +75,7 @@ export async function PATCH(request: NextRequest, context: Context) {
       "calendar_invite_policy",
       calendarInvitePolicies,
     );
+    const meetingOwnerId = await validMeetingOwnerId(session.groupId, body.meeting_owner);
 
     const updated = await prisma.session.update({
       where: { sessionId },
@@ -83,6 +85,7 @@ export async function PATCH(request: NextRequest, context: Context) {
         ...(calendarInvitePolicy !== undefined
           ? { calendarInvitePolicy }
           : {}),
+        ...(body.meeting_owner !== undefined ? { meetingOwnerId } : {}),
       },
     });
 
@@ -91,10 +94,37 @@ export async function PATCH(request: NextRequest, context: Context) {
       topic: updated.topic,
       description: updated.description,
       calendar_invite_policy: updated.calendarInvitePolicy,
+      meeting_owner: updated.meetingOwnerId ? Number(updated.meetingOwnerId) : null,
       status: updated.status,
       updated_at: updated.updatedAt.toISOString(),
     });
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+async function validMeetingOwnerId(groupId: bigint, value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new ApiError("VALIDATION_ERROR", "meeting_owner must be a numeric user id.");
+  }
+  const userId = BigInt(value);
+  const membership = await prisma.member.findUnique({
+    where: { groupId_userId: { groupId, userId } },
+    include: {
+      user: {
+        include: {
+          oauthAccounts: { where: { provider: "google" }, take: 1 },
+        },
+      },
+    },
+  });
+  if (!membership) {
+    throw new ApiError("NOT_GROUP_MEMBER", "Meeting owner must be a group member.");
+  }
+  const account = membership.user.oauthAccounts[0] ?? null;
+  if (!account || !account.scope?.split(/\s+/).includes("https://www.googleapis.com/auth/calendar.events")) {
+    throw new ApiError("GOOGLE_TOKEN_MISSING", "Meeting owner must connect Google Calendar first.");
+  }
+  return userId;
 }

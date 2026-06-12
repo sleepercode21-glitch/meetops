@@ -3,7 +3,7 @@ import { AuthenticatedPage } from "@/components/app-shell/AuthenticatedPage";
 import { Card } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SessionEditForm } from "@/components/sessions/SessionEditForm";
-import { ApiRequestError, getSessionDetail } from "@/lib/web-api";
+import { ApiRequestError, getGroupMembers, getSessionDetail } from "@/lib/web-api";
 
 export default async function EditSessionPage({
   params,
@@ -11,7 +11,7 @@ export default async function EditSessionPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
-  const session = await getEditableSession(sessionId);
+  const { session, members } = await getEditableSession(sessionId);
 
   if (!session.currentUserCanManage) {
     redirect(`/sessions/${session.id}`);
@@ -25,7 +25,7 @@ export default async function EditSessionPage({
           subtitle={session.topic ?? "Untitled session"}
         />
         <Card className="mx-auto max-w-3xl">
-          <SessionEditForm session={session} />
+          <SessionEditForm session={session} members={members} />
         </Card>
       </div>
     </AuthenticatedPage>
@@ -34,7 +34,9 @@ export default async function EditSessionPage({
 
 async function getEditableSession(sessionId: string) {
   try {
-    return await getSessionDetail(sessionId);
+    const session = await getSessionDetail(sessionId);
+    const { members } = await getGroupMembers(session.groupId);
+    return { session, members };
   } catch (error) {
     if (
       error instanceof ApiRequestError &&

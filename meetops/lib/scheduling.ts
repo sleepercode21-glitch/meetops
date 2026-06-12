@@ -310,7 +310,7 @@ async function selectMeetingOwner(sessionId: bigint): Promise<
     where: { sessionId },
     include: { group: true },
   });
-  const meetingOwner = session.group.defaultMeetingOwner ?? session.hostId;
+  const meetingOwner = session.meetingOwnerId ?? session.group.defaultMeetingOwner ?? session.hostId;
   const member = await prisma.member.findUnique({
     where: { groupId_userId: { groupId: session.groupId, userId: meetingOwner } },
   });

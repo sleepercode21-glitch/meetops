@@ -226,7 +226,7 @@ export function MeetingOwnerForm({
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const adminMembers = members.filter((member) => member.is_admin);
+  const calendarReadyMembers = members.filter((member) => member.calendar_events_scope_granted);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -266,9 +266,9 @@ export function MeetingOwnerForm({
           className="mt-1 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
         >
           <option value="">Fallback to session host</option>
-          {adminMembers.map((member) => (
+          {calendarReadyMembers.map((member) => (
             <option key={member.user_id} value={member.user_id}>
-              {displayMember(member)} {member.calendar_events_scope_granted ? "" : "(needs Calendar)"}
+              {displayMember(member)}
             </option>
           ))}
         </select>

@@ -94,6 +94,7 @@ model User {
   createdPolls        Poll[]
   pollVotes           PollVote[]
   suggestions         SuggestedOption[]
+  sessionComments     SessionComment[]
   auditLogs           AuditLog[]
 
   @@map("users")
@@ -187,6 +188,7 @@ model Session {
   meetingOwner   User?       @relation("SessionMeetingOwner", fields: [meetingOwnerId], references: [userId], onDelete: SetNull)
   selectedOption PollOption? @relation("SessionSelectedOption", fields: [selectedOptionId], references: [optionId], onDelete: SetNull)
   polls          Poll[]
+  comments       SessionComment[]
   auditLogs      AuditLog[]
 
   @@index([groupId], map: "idx_sessions_group_id")
@@ -198,6 +200,21 @@ model Session {
   @@index([calendarInvitePolicy], map: "idx_sessions_calendar_invite_policy")
   @@index([groupId, status, scheduledStartTime], map: "idx_sessions_group_status_start")
   @@map("sessions")
+}
+
+model SessionComment {
+  sessionCommentId BigInt   @id @default(autoincrement()) @map("session_comment_id")
+  sessionId        BigInt   @map("session_id")
+  userId           BigInt   @map("user_id")
+  body             String   @db.VarChar(1000)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session Session @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([sessionId, createdAt], map: "idx_session_comments_session_created_at")
+  @@index([userId], map: "idx_session_comments_user_id")
+  @@map("session_comments")
 }
 
 model Poll {

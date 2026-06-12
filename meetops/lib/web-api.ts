@@ -367,6 +367,14 @@ export function toSession(session: ApiSessionSummary): Session {
     scheduledEndTime: session.scheduled_end_time ?? undefined,
     meetLink: session.meet_link ?? undefined,
     currentUserCanManage: session.current_user_can_manage,
+    meetingOwnerId: detail?.meeting_owner
+      ? String(detail.meeting_owner.user_id)
+      : undefined,
+    meetingOwnerName: detail?.meeting_owner
+      ? [detail.meeting_owner.firstname, detail.meeting_owner.lastname]
+          .filter(Boolean)
+          .join(" ") || detail.meeting_owner.email
+      : undefined,
     selectedOptionId: detail?.selected_option_id
       ? String(detail.selected_option_id)
       : undefined,

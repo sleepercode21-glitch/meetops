@@ -71,13 +71,6 @@ export async function PATCH(request: NextRequest, context: Context) {
         "Default meeting owner must be a group member.",
       );
     }
-    if (!membership.isAdmin) {
-      throw new ApiError(
-        "GROUP_ADMIN_REQUIRED",
-        "Default meeting owner must be a group admin for MVP.",
-      );
-    }
-
     const googleAccount = membership.user.oauthAccounts[0] ?? null;
     if (!googleAccount) {
       throw new ApiError(

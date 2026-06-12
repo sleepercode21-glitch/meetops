@@ -258,6 +258,7 @@ function DraftReview({ session, canManage }: { session: Session; canManage: bool
         <Detail label="Title" value={session.topic ?? "Untitled session"} />
         <Detail label="Host" value={session.hostName ?? "Host"} />
         <Detail label="Invite policy" value={calendarInvitePolicyLabels[session.calendarInvitePolicy]} />
+        <Detail label="Meet account" value={session.meetingOwnerName ?? "Group default, then host"} />
         <Detail label="Selected time" value={session.scheduledStartTime ? "Selected" : "Not selected yet"} />
       </div>
       {session.description ? (

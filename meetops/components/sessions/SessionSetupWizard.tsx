@@ -80,6 +80,7 @@ function SessionHeaderCard({
           <div className="mt-4 grid gap-3 text-sm text-zinc-600 sm:grid-cols-2">
             <Info label="Host" value={session.hostName ?? "Host"} />
             <Info label="Invite policy" value={calendarInvitePolicyLabels[session.calendarInvitePolicy]} />
+            <Info label="Meet account" value={session.meetingOwnerName ?? "Group default, then host"} />
           </div>
           {session.scheduledStartTime ? (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3">

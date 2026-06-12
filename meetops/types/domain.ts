@@ -99,6 +99,7 @@ export type Session = {
   meetLink?: string;
   calendarEventUrl?: string;
   meetingOwnerId?: string;
+  meetingOwnerName?: string;
   selectedOptionId?: string;
   schedulingAttemptCount: number;
   lastSchedulingAttemptAt?: string;
