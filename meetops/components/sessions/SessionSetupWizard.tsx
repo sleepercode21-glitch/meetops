@@ -1,11 +1,9 @@
 import { ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
-import { TimeDisplay } from "@/components/common/TimeDisplay";
 import { RealtimeSessionRefresh } from "@/components/sessions/RealtimeSessionRefresh";
 import { SessionActions } from "@/components/sessions/SessionActions";
 import { SessionComments } from "@/components/sessions/SessionComments";
 import { SessionWorkflowStepper, type WorkflowAction } from "@/components/sessions/SessionWorkflowStepper";
-import { calendarInvitePolicyLabels } from "@/lib/labels";
 import type { ApiGroupDetail } from "@/lib/web-api";
 import type { Poll, Session, SessionStatus } from "@/types/domain";
 
@@ -53,7 +51,6 @@ export function SessionSetupWizard({
         />
 
         <aside className="space-y-4 lg:sticky lg:top-20">
-          <SessionSummaryCard session={session} />
           {canManage ? (
             <HostControlsCard
               session={session}
@@ -67,30 +64,6 @@ export function SessionSetupWizard({
         </aside>
       </div>
     </div>
-  );
-}
-
-function SessionSummaryCard({ session }: { session: Session }) {
-  return (
-    <Card className="p-4">
-      <h2 className="text-sm font-semibold text-zinc-950">Session</h2>
-      {session.description ? (
-        <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-600">{session.description}</p>
-      ) : (
-        <p className="mt-2 text-sm text-zinc-500">No description yet.</p>
-      )}
-      <div className="mt-4 space-y-3 text-sm">
-        <Info label="Host" value={session.hostName ?? "Host"} />
-        <Info label="Invite policy" value={calendarInvitePolicyLabels[session.calendarInvitePolicy]} />
-        <Info label="Meet account" value={session.meetingOwnerName ?? "Group default, then host"} />
-      </div>
-      {session.scheduledStartTime ? (
-        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Scheduled</div>
-          <TimeDisplay start={session.scheduledStartTime} end={session.scheduledEndTime} />
-        </div>
-      ) : null}
-    </Card>
   );
 }
 
@@ -199,13 +172,4 @@ function shouldRefresh(session: Session, polls: Poll[]) {
   if (["cancelled", "completed"].includes(session.status)) return false;
   if (["scheduling", "scheduling_failed", "needs_host_decision", "rescheduling"].includes(session.status)) return true;
   return polls.some((poll) => poll.status === "active" || poll.status === "draft");
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className="mt-1 break-words text-zinc-900">{value}</div>
-    </div>
-  );
 }

@@ -20,6 +20,12 @@ type ScheduleSessionInput = {
   actorUserId?: bigint | null;
 };
 
+type CancelCalendarEventInput = {
+  sessionId: bigint;
+  actorUserId?: bigint | null;
+  reason?: string | null;
+};
+
 type CalendarEventResponse = {
   id?: string;
   hangoutLink?: string;
@@ -202,6 +208,74 @@ export async function scheduleSession(input: ScheduleSessionInput): Promise<Sche
       owner.meetingOwner,
     );
   }
+}
+
+export async function cancelCalendarEventForSession(input: CancelCalendarEventInput): Promise<
+  | { outcome: "cancelled"; calendar_event_id: string }
+  | { outcome: "skipped"; reason: string }
+  | { outcome: "failed"; message: string }
+> {
+  const session = await prisma.session.findUniqueOrThrow({
+    where: { sessionId: input.sessionId },
+    include: { group: true },
+  });
+
+  if (!session.calendarEventId) {
+    return { outcome: "skipped", reason: "no_calendar_event" };
+  }
+
+  const meetingOwner = session.meetingOwnerId ?? session.group.defaultMeetingOwner ?? session.hostId;
+  const account = await prisma.oAuthAccount.findUnique({
+    where: { userId_provider: { userId: meetingOwner, provider: "google" } },
+  });
+
+  if (!account?.accessToken || !calendarScopeGranted(account)) {
+    return { outcome: "failed", message: "The meeting owner must reconnect Google Calendar before cancelling the calendar event." };
+  }
+
+  let accessToken = account.accessToken;
+  if (account.accessTokenExpiresAt && account.accessTokenExpiresAt.getTime() < Date.now() + 60_000) {
+    const refreshed = await refreshGoogleToken(account.refreshToken);
+    if (!refreshed) {
+      return { outcome: "failed", message: "The meeting owner must reconnect Google Calendar before cancelling the calendar event." };
+    }
+    await prisma.oAuthAccount.update({
+      where: { oauthAccountId: account.oauthAccountId },
+      data: {
+        accessToken: refreshed.accessToken,
+        accessTokenExpiresAt: refreshed.expiresAt,
+      },
+    });
+    accessToken = refreshed.accessToken;
+  }
+
+  const response = await deleteCalendarEvent({
+    accessToken,
+    calendarId: session.googleCalendarId,
+    eventId: session.calendarEventId,
+    sendUpdates: session.calendarInvitePolicy !== "app_only",
+  });
+
+  if (!response.ok && response.status !== 404 && response.status !== 410) {
+    return { outcome: "failed", message: `Google Calendar returned ${response.status} while cancelling the event.` };
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      userId: input.actorUserId,
+      groupId: session.groupId,
+      sessionId: input.sessionId,
+      action: "calendar_event_cancelled",
+      metadata: {
+        reason: input.reason,
+        calendar_event_id: session.calendarEventId,
+        meeting_owner: toId(meetingOwner),
+        already_missing: response.status === 404 || response.status === 410,
+      },
+    },
+  });
+
+  return { outcome: "cancelled", calendar_event_id: session.calendarEventId };
 }
 
 async function resolveFinalTimingWinner(sessionId: bigint, pollId: bigint): Promise<ResolveTimingResult> {
@@ -446,6 +520,29 @@ async function upsertCalendarEvent({
     throw new Error(`Google Calendar returned ${response.status}.`);
   }
   return (await response.json()) as CalendarEventResponse;
+}
+
+function deleteCalendarEvent({
+  accessToken,
+  calendarId,
+  eventId,
+  sendUpdates,
+}: {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+  sendUpdates: boolean;
+}) {
+  const encodedCalendarId = encodeURIComponent(calendarId);
+  const encodedEventId = encodeURIComponent(eventId);
+  const query = `sendUpdates=${sendUpdates ? "all" : "none"}`;
+  return fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodedCalendarId}/events/${encodedEventId}?${query}`,
+    {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
 }
 
 function extractMeetLink(event: CalendarEventResponse) {

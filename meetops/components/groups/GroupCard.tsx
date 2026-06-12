@@ -5,10 +5,10 @@ import type { Group } from "@/types/domain";
 
 export function GroupCard({ group }: { group: Group }) {
   return (
-    <Card>
+    <Card className="transition hover:-translate-y-0.5 hover:border-teal-900/25 hover:shadow-[0_2px_8px_rgba(16,24,20,0.08),0_18px_40px_rgba(16,24,20,0.08)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-zinc-950">{group.name}</h2>
+          <h2 className="text-lg font-semibold text-zinc-950">{group.name}</h2>
           <p className="mt-1 line-clamp-2 text-sm text-zinc-600">{group.description}</p>
         </div>
         <RoleBadge role={group.role} />
@@ -29,7 +29,7 @@ export function GroupCard({ group }: { group: Group }) {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-md border border-zinc-200 bg-zinc-50 p-2">
+    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-2.5">
       <div className="font-semibold text-zinc-950">{value}</div>
       <div className="text-xs text-zinc-500">{label}</div>
     </div>

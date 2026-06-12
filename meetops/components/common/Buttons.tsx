@@ -3,10 +3,10 @@ import Link from "next/link";
 type ButtonTone = "primary" | "secondary" | "danger" | "ghost";
 
 const tones: Record<ButtonTone, string> = {
-  primary: "border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-800",
-  secondary: "border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50",
+  primary: "border-teal-900 bg-teal-900 text-white shadow-sm hover:bg-teal-800",
+  secondary: "border-zinc-300 bg-white text-zinc-900 hover:border-zinc-400 hover:bg-zinc-50",
   danger: "border-rose-600 bg-rose-600 text-white hover:bg-rose-700",
-  ghost: "border-transparent bg-transparent text-zinc-700 hover:bg-zinc-100",
+  ghost: "border-transparent bg-transparent text-zinc-700 hover:bg-white/70",
 };
 
 export function Button({
@@ -20,7 +20,7 @@ export function Button({
   return (
     <button
       {...props}
-      className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${tones[tone]} ${className}`}
+      className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${tones[tone]} ${className}`}
     >
       {children}
     </button>
@@ -41,7 +41,7 @@ export function ButtonLink({
   return (
     <Link
       href={href}
-      className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3.5 py-2 text-sm font-medium transition ${tones[tone]} ${className}`}
+      className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition ${tones[tone]} ${className}`}
     >
       {children}
     </Link>

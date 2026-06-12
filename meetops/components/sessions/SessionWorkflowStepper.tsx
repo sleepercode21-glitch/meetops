@@ -17,13 +17,13 @@ export type WorkflowAction = {
   emptyText: string;
 };
 
-const workflowSteps: { id: WorkflowStep; label: string }[] = [
-  { id: "draft", label: "Draft" },
-  { id: "interest", label: "Interest" },
-  { id: "topic", label: "Topic" },
-  { id: "availability", label: "Availability" },
-  { id: "timing", label: "Timing" },
-  { id: "scheduled", label: "Scheduled" },
+const workflowSteps: { id: WorkflowStep; label: string; shortLabel: string }[] = [
+  { id: "draft", label: "Draft", shortLabel: "Draft" },
+  { id: "interest", label: "Interest", shortLabel: "Interest" },
+  { id: "topic", label: "Topic", shortLabel: "Topic" },
+  { id: "availability", label: "Availability", shortLabel: "Avail" },
+  { id: "timing", label: "Timing", shortLabel: "Timing" },
+  { id: "scheduled", label: "Scheduled", shortLabel: "Meet" },
 ];
 
 export function SessionWorkflowStepper({
@@ -73,7 +73,7 @@ export function SessionWorkflowStepper({
                   <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${stepCircleTone(status, selected)}`}>
                     {status === "finish" ? <span className="size-2.5 rounded-full bg-current" /> : index + 1}
                   </span>
-                  <span className="truncate text-sm font-semibold">{step.label}</span>
+                  <span className="text-xs font-semibold sm:text-sm">{step.shortLabel}</span>
                 </button>
               );
             })}
@@ -110,7 +110,7 @@ function SelectedStepPanel({
   nextAction?: WorkflowAction;
 }) {
   if (step === "draft") {
-    return <DraftReview session={session} canManage={canManage} />;
+    return <DraftReview session={session} canManage={canManage} nextAction={step === currentStep ? nextAction : undefined} />;
   }
 
   if (step === "scheduled") {
@@ -246,7 +246,15 @@ function workflowAction(
   };
 }
 
-function DraftReview({ session, canManage }: { session: Session; canManage: boolean }) {
+function DraftReview({
+  session,
+  canManage,
+  nextAction,
+}: {
+  session: Session;
+  canManage: boolean;
+  nextAction?: WorkflowAction;
+}) {
   return (
     <Card className="p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -257,9 +265,16 @@ function DraftReview({ session, canManage }: { session: Session; canManage: bool
           </p>
         </div>
         {canManage && !["cancelled", "completed"].includes(session.status) ? (
-          <ButtonLink href={`/sessions/${session.id}/edit`} tone="primary" className="w-full sm:w-auto">
-            Edit Details
-          </ButtonLink>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-44">
+            {nextAction ? (
+              <ButtonLink href={nextAction.href} tone="primary" className="w-full">
+                {nextAction.label}
+              </ButtonLink>
+            ) : null}
+            <ButtonLink href={`/sessions/${session.id}/edit`} className="w-full">
+              Edit Details
+            </ButtonLink>
+          </div>
         ) : null}
       </div>
     </Card>

@@ -10,11 +10,11 @@ export function SessionCard({ session }: { session: Session }) {
     session.status === "needs_host_decision" || session.status === "scheduling_failed";
 
   return (
-    <Card>
+    <Card className="transition hover:-translate-y-0.5 hover:border-teal-900/25 hover:shadow-[0_2px_8px_rgba(16,24,20,0.08),0_18px_40px_rgba(16,24,20,0.08)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-semibold text-zinc-950">
+            <h2 className="text-lg font-semibold text-zinc-950">
               {session.topic ?? "Untitled session"}
             </h2>
             <StatusBadge status={session.status} />
@@ -48,7 +48,7 @@ export function SessionCard({ session }: { session: Session }) {
           {needsAction ? "Review action" : "View session"}
         </ButtonLink>
         {needsAction ? (
-          <span className="rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+          <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
             Host/admin action required
           </span>
         ) : null}
