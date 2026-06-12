@@ -3,6 +3,7 @@ import { Card } from "@/components/common/Card";
 import { TimeDisplay } from "@/components/common/TimeDisplay";
 import { RealtimeSessionRefresh } from "@/components/sessions/RealtimeSessionRefresh";
 import { SessionActions } from "@/components/sessions/SessionActions";
+import { SessionComments } from "@/components/sessions/SessionComments";
 import { SessionWorkflowStepper, type WorkflowAction } from "@/components/sessions/SessionWorkflowStepper";
 import { calendarInvitePolicyLabels } from "@/lib/labels";
 import type { ApiGroupDetail } from "@/lib/web-api";
@@ -18,6 +19,7 @@ export function SessionSetupWizard({
   group: ApiGroupDetail;
 }) {
   const canManage = Boolean(session.currentUserCanManage);
+  const canManageFlow = canManage && !terminalStatus(session.status);
   const nextAction = nextHostAction(session, polls);
   const liveEnabled = shouldRefresh(session, polls);
 
@@ -38,8 +40,13 @@ export function SessionSetupWizard({
       <SessionWorkflowStepper
         session={session}
         polls={polls}
-        canManage={canManage}
+        canManage={canManageFlow}
         nextAction={nextAction}
+      />
+
+      <SessionComments
+        sessionId={session.id}
+        disabled={session.status === "cancelled" || session.status === "completed"}
       />
     </div>
   );
@@ -186,11 +193,11 @@ function pollAction(
 }
 
 function terminalStatus(status: SessionStatus) {
-  return status === "cancelled" || status === "completed" || status === "scheduled";
+  return status === "cancelled" || status === "completed";
 }
 
 function shouldRefresh(session: Session, polls: Poll[]) {
-  if (["cancelled", "completed", "scheduled"].includes(session.status)) return false;
+  if (["cancelled", "completed"].includes(session.status)) return false;
   if (["scheduling", "scheduling_failed", "needs_host_decision", "rescheduling"].includes(session.status)) return true;
   return polls.some((poll) => poll.status === "active" || poll.status === "draft");
 }

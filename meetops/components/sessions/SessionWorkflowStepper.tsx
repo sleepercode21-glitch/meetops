@@ -50,7 +50,7 @@ export function SessionWorkflowStepper({
           <div>
             <h2 className="text-lg font-semibold text-zinc-950">Session Flow</h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Move through each step. Completed steps are review-only.
+              Move through each step. Hosts can reopen a step when the session needs a new decision.
             </p>
           </div>
           <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
@@ -296,9 +296,17 @@ function ScheduledReview({ session, canManage }: { session: Session; canManage: 
         </ButtonLink>
       ) : null}
       {canManage ? (
-        <ButtonLink href={`/sessions/${session.id}/reschedule`} className="mt-4 w-full sm:ml-2 sm:w-auto">
-          Change Time
-        </ButtonLink>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <ButtonLink href={`/sessions/${session.id}/polls/new?type=availability`} className="w-full sm:w-auto">
+            Collect Availability Again
+          </ButtonLink>
+          <ButtonLink href={`/sessions/${session.id}/polls/new?type=final_timing`} className="w-full sm:w-auto">
+            Run Timing Again
+          </ButtonLink>
+          <ButtonLink href={`/sessions/${session.id}/reschedule`} className="w-full sm:w-auto">
+            Pick Time Manually
+          </ButtonLink>
+        </div>
       ) : null}
     </Card>
   );

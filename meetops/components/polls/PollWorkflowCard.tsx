@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { PollStatusBadge } from "@/components/common/Badge";
 import { Button, ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
-import { SuggestionPanel } from "@/components/polls/SuggestionPanel";
 import { pollTypeLabels } from "@/lib/labels";
 import type { Poll, PollOption } from "@/types/domain";
 
@@ -77,7 +76,6 @@ function AvailabilityPollCard({ poll, canManage }: { poll: Poll; canManage: bool
       </div>
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
       {canManage && poll.status === "draft" ? <DraftControls poll={poll} pending={pending} setPending={setPending} setMessage={setMessage} /> : null}
-      <PollComments poll={poll} canManage={canManage} />
     </Card>
   );
 }
@@ -164,7 +162,6 @@ function FinalTimingPollCard({ poll, canManage }: { poll: Poll; canManage: boole
       ) : null}
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
       {canManage && poll.status === "draft" ? <DraftControls poll={poll} pending={pending} setPending={setPending} setMessage={setMessage} /> : null}
-      <PollComments poll={poll} canManage={canManage} />
     </Card>
   );
 }
@@ -231,21 +228,7 @@ function StandardPollCard({ poll, canManage }: { poll: Poll; canManage: boolean 
 
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
       {canManage && poll.status === "draft" ? <DraftControls poll={poll} pending={pending} setPending={setPending} setMessage={setMessage} /> : null}
-      <PollComments poll={poll} canManage={canManage} />
     </Card>
-  );
-}
-
-function PollComments({ poll, canManage }: { poll: Poll; canManage: boolean }) {
-  if (!poll.acceptsSuggestions && !poll.suggestions.length) return null;
-  return (
-    <SuggestionPanel
-      pollId={poll.id}
-      pollType={poll.type}
-      pollStatus={poll.status}
-      suggestions={poll.suggestions}
-      canManage={canManage}
-    />
   );
 }
 
