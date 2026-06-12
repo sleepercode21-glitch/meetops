@@ -83,11 +83,11 @@ export function SessionComments({
   }
 
   return (
-    <Card className="p-4 sm:p-5">
+    <Card className="p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-950">Session Comments</h2>
-          <p className="mt-1 text-sm text-zinc-600">A live thread for the whole session flow.</p>
+          <h2 className="text-sm font-semibold text-zinc-950">Comments</h2>
+          <p className="mt-1 text-xs text-zinc-600">Live for this session.</p>
         </div>
         <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -95,10 +95,10 @@ export function SessionComments({
         </span>
       </div>
 
-      <div className="mt-4 max-h-64 space-y-3 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+      <div className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 p-2">
         {comments.length ? (
           comments.map((comment) => (
-            <div key={comment.comment_id} className="rounded-lg bg-white p-3 shadow-sm">
+            <div key={comment.comment_id} className="rounded-md bg-white p-2 shadow-sm">
               <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                 <span className="font-semibold text-zinc-800">{comment.author_name}</span>
                 <span>{new Date(comment.created_at).toLocaleString()}</span>
@@ -107,14 +107,14 @@ export function SessionComments({
             </div>
           ))
         ) : (
-          <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-4 text-sm text-zinc-600">
+          <p className="rounded-md border border-dashed border-zinc-300 bg-white p-3 text-sm text-zinc-600">
             No comments yet.
           </p>
         )}
       </div>
 
       {!disabled ? (
-        <form onSubmit={submit} className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <form onSubmit={submit} className="mt-3 flex flex-col gap-2">
           <input
             value={body}
             onChange={(event) => setBody(event.target.value)}
@@ -123,7 +123,7 @@ export function SessionComments({
             className="min-h-10 flex-1 rounded-md border border-zinc-300 px-3 text-sm"
             disabled={pending}
           />
-          <Button type="submit" tone="primary" disabled={pending} className="w-full sm:w-auto">
+          <Button type="submit" tone="primary" disabled={pending} className="w-full">
             {pending ? "Posting..." : "Post"}
           </Button>
         </form>

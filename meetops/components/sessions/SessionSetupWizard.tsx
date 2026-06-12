@@ -24,91 +24,97 @@ export function SessionSetupWizard({
   const liveEnabled = shouldRefresh(session, polls);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
-      <div className="text-sm font-medium text-zinc-500">
-        <a className="hover:text-zinc-900" href={`/groups/${group.group_id}`}>{group.name}</a>
-        <span> / Session</span>
+    <div className="mx-auto max-w-6xl space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-zinc-500">
+            <a className="hover:text-zinc-900" href={`/groups/${group.group_id}`}>{group.name}</a>
+            <span> / Session</span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-2xl font-semibold text-zinc-950">{session.topic ?? "Untitled session"}</h1>
+            <SessionStatusPill status={derivedStatus(session)} />
+            <RealtimeSessionRefresh enabled={liveEnabled} />
+          </div>
+        </div>
+        {session.status === "scheduled" && session.meetLink ? (
+          <ButtonLink href={session.meetLink} tone="primary" className="w-full sm:w-auto">
+            Open Meet
+          </ButtonLink>
+        ) : null}
       </div>
 
-      <SessionHeaderCard
-        session={session}
-        canManage={canManage}
-        liveEnabled={liveEnabled}
-        nextAction={nextAction}
-      />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <SessionWorkflowStepper
+          session={session}
+          polls={polls}
+          canManage={canManageFlow}
+          nextAction={nextAction}
+        />
 
-      <SessionWorkflowStepper
-        session={session}
-        polls={polls}
-        canManage={canManageFlow}
-        nextAction={nextAction}
-      />
-
-      <SessionComments
-        sessionId={session.id}
-        disabled={session.status === "cancelled" || session.status === "completed"}
-      />
+        <aside className="space-y-4 lg:sticky lg:top-20">
+          <SessionSummaryCard session={session} />
+          {canManage ? (
+            <HostControlsCard
+              session={session}
+              canManage={canManage}
+              nextAction={nextAction}
+            />
+          ) : null}
+          <SessionComments
+            sessionId={session.id}
+            disabled={session.status === "cancelled" || session.status === "completed"}
+          />
+        </aside>
+      </div>
     </div>
   );
 }
 
-function SessionHeaderCard({
+function SessionSummaryCard({ session }: { session: Session }) {
+  return (
+    <Card className="p-4">
+      <h2 className="text-sm font-semibold text-zinc-950">Session</h2>
+      {session.description ? (
+        <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-600">{session.description}</p>
+      ) : (
+        <p className="mt-2 text-sm text-zinc-500">No description yet.</p>
+      )}
+      <div className="mt-4 space-y-3 text-sm">
+        <Info label="Host" value={session.hostName ?? "Host"} />
+        <Info label="Invite policy" value={calendarInvitePolicyLabels[session.calendarInvitePolicy]} />
+        <Info label="Meet account" value={session.meetingOwnerName ?? "Group default, then host"} />
+      </div>
+      {session.scheduledStartTime ? (
+        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Scheduled</div>
+          <TimeDisplay start={session.scheduledStartTime} end={session.scheduledEndTime} />
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function HostControlsCard({
   session,
   canManage,
-  liveEnabled,
   nextAction,
 }: {
   session: Session;
   canManage: boolean;
-  liveEnabled: boolean;
   nextAction?: WorkflowAction;
 }) {
+  if (terminalStatus(session.status)) return null;
   return (
-    <Card className="p-5">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold text-zinc-950">{session.topic ?? "Untitled session"}</h1>
-            <SessionStatusPill status={derivedStatus(session)} />
-            <RealtimeSessionRefresh enabled={liveEnabled} />
-          </div>
-          {session.description ? (
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">{session.description}</p>
-          ) : (
-            <p className="mt-2 text-sm text-zinc-500">No description yet.</p>
-          )}
-          <div className="mt-4 grid gap-3 text-sm text-zinc-600 sm:grid-cols-2">
-            <Info label="Host" value={session.hostName ?? "Host"} />
-            <Info label="Invite policy" value={calendarInvitePolicyLabels[session.calendarInvitePolicy]} />
-            <Info label="Meet account" value={session.meetingOwnerName ?? "Group default, then host"} />
-          </div>
-          {session.scheduledStartTime ? (
-            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <div className="text-sm font-semibold text-emerald-950">Scheduled time</div>
-              <TimeDisplay start={session.scheduledStartTime} end={session.scheduledEndTime} />
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex shrink-0 flex-col gap-2 md:min-w-48">
-          {session.status === "scheduled" && session.meetLink ? (
-            <ButtonLink href={session.meetLink} tone="primary" className="w-full">
-              Open Meet
-            </ButtonLink>
-          ) : null}
-          {canManage ? (
-            <>
-              {nextAction ? (
-                <ButtonLink href={nextAction.href} tone="primary" className="w-full">
-                  {nextAction.label}
-                </ButtonLink>
-              ) : null}
-              {!terminalStatus(session.status) ? (
-                <SessionActions session={session} canManage={canManage} />
-              ) : null}
-            </>
-          ) : null}
-        </div>
+    <Card className="p-4">
+      <h2 className="text-sm font-semibold text-zinc-950">Host Controls</h2>
+      <div className="mt-3 space-y-2">
+        {nextAction ? (
+          <ButtonLink href={nextAction.href} tone="primary" className="w-full">
+            {nextAction.label}
+          </ButtonLink>
+        ) : null}
+        <SessionActions session={session} canManage={canManage} />
       </div>
     </Card>
   );

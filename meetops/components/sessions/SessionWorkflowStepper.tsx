@@ -5,7 +5,6 @@ import { ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
 import { TimeDisplay } from "@/components/common/TimeDisplay";
 import { PollWorkflowCard } from "@/components/polls/PollWorkflowCard";
-import { calendarInvitePolicyLabels } from "@/lib/labels";
 import type { Poll, Session } from "@/types/domain";
 
 export type WorkflowStep = "draft" | "interest" | "topic" | "availability" | "timing" | "scheduled";
@@ -45,32 +44,30 @@ export function SessionWorkflowStepper({
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="border-b border-zinc-200 p-4 sm:p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="border-b border-zinc-200 p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-950">Session Flow</h2>
-            <p className="mt-1 text-sm text-zinc-600">
-              Move through each step. Hosts can reopen a step when the session needs a new decision.
-            </p>
+            <h2 className="text-base font-semibold text-zinc-950">Flow</h2>
+            <p className="mt-0.5 text-sm text-zinc-600">Click any reached step to review it.</p>
           </div>
           <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
             Step {selectedIndex + 1} of {workflowSteps.length}
           </span>
         </div>
         <div className="overflow-x-auto pb-1">
-          <div className="flex min-w-[760px] items-center gap-3">
+          <div className="flex min-w-[680px] items-center gap-2">
             {workflowSteps.map((step, index) => {
               const status = stepStatus(step.id, index, currentIndex, session, polls);
               const selected = selectedStep === step.id;
               return (
-                <div key={step.id} className="flex flex-1 items-center gap-3 last:flex-none">
+                <div key={step.id} className="flex flex-1 items-center gap-2 last:flex-none">
                   <button
                     type="button"
                     onClick={() => setSelectedStep(step.id)}
-                    className={`group flex min-h-12 items-center gap-2 rounded-full border px-2.5 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${stepButtonTone(status, selected)}`}
+                    className={`group flex min-h-10 items-center gap-2 rounded-full border px-2 py-1.5 text-left transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${stepButtonTone(status, selected)}`}
                     aria-current={selected ? "step" : undefined}
                   >
-                    <span className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${stepCircleTone(status, selected)}`}>
+                    <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${stepCircleTone(status, selected)}`}>
                       {status === "finish" ? <span className="size-2.5 rounded-full bg-current" /> : index + 1}
                     </span>
                     <span className="whitespace-nowrap text-sm font-semibold">{step.label}</span>
@@ -85,7 +82,7 @@ export function SessionWorkflowStepper({
         </div>
       </div>
 
-      <div className="bg-zinc-50 p-4 sm:p-5">
+      <div className="bg-zinc-50/60 p-4">
         <SelectedStepPanel
           session={session}
           polls={polls}
@@ -252,25 +249,20 @@ function workflowAction(
 
 function DraftReview({ session, canManage }: { session: Session; canManage: boolean }) {
   return (
-    <Card>
-      <h3 className="text-lg font-semibold text-zinc-950">Session Details</h3>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <Detail label="Title" value={session.topic ?? "Untitled session"} />
-        <Detail label="Host" value={session.hostName ?? "Host"} />
-        <Detail label="Invite policy" value={calendarInvitePolicyLabels[session.calendarInvitePolicy]} />
-        <Detail label="Meet account" value={session.meetingOwnerName ?? "Group default, then host"} />
-        <Detail label="Selected time" value={session.scheduledStartTime ? "Selected" : "Not selected yet"} />
-      </div>
-      {session.description ? (
-        <div className="mt-4">
-          <Detail label="Description" value={session.description} />
+    <Card className="p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold text-zinc-950">Draft</h3>
+          <p className="mt-1 text-sm text-zinc-600">
+            {session.description || "Session details are ready to edit before the flow moves forward."}
+          </p>
         </div>
-      ) : null}
-      {canManage && !["cancelled", "completed"].includes(session.status) ? (
-        <ButtonLink href={`/sessions/${session.id}/edit`} tone="primary" className="mt-4 w-full sm:w-auto">
-          Edit Session Details
-        </ButtonLink>
-      ) : null}
+        {canManage && !["cancelled", "completed"].includes(session.status) ? (
+          <ButtonLink href={`/sessions/${session.id}/edit`} tone="primary" className="w-full sm:w-auto">
+            Edit Details
+          </ButtonLink>
+        ) : null}
+      </div>
     </Card>
   );
 }
@@ -428,13 +420,4 @@ function stepForPollType(type: Poll["type"]): WorkflowStep {
 function emptyTitle(step: WorkflowStep, isCurrent: boolean) {
   if (isCurrent) return "Current Step";
   return `${workflowSteps.find((item) => item.id === step)?.label ?? "Step"} Not Started`;
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className="mt-1 text-sm text-zinc-950">{value}</div>
-    </div>
-  );
 }
