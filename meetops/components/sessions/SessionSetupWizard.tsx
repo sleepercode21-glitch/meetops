@@ -58,7 +58,6 @@ export function SessionSetupWizard({
             <HostControlsCard
               session={session}
               canManage={canManage}
-              nextAction={nextAction}
             />
           ) : null}
           <SessionComments
@@ -98,22 +97,15 @@ function SessionSummaryCard({ session }: { session: Session }) {
 function HostControlsCard({
   session,
   canManage,
-  nextAction,
 }: {
   session: Session;
   canManage: boolean;
-  nextAction?: WorkflowAction;
 }) {
   if (terminalStatus(session.status)) return null;
   return (
     <Card className="p-4">
       <h2 className="text-sm font-semibold text-zinc-950">Host Controls</h2>
       <div className="mt-3 space-y-2">
-        {nextAction ? (
-          <ButtonLink href={nextAction.href} tone="primary" className="w-full">
-            {nextAction.label}
-          </ButtonLink>
-        ) : null}
         <SessionActions session={session} canManage={canManage} />
       </div>
     </Card>

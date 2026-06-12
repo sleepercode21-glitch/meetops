@@ -38,7 +38,11 @@ export function SessionWorkflowStepper({
   nextAction?: WorkflowAction;
 }) {
   const currentStep = currentWorkflowStep(session, polls);
-  const [selectedStep, setSelectedStep] = useState<WorkflowStep>(currentStep);
+  const [selection, setSelection] = useState<{ currentStep: WorkflowStep; selectedStep: WorkflowStep }>({
+    currentStep,
+    selectedStep: currentStep,
+  });
+  const selectedStep = selection.currentStep === currentStep ? selection.selectedStep : currentStep;
   const currentIndex = workflowSteps.findIndex((step) => step.id === currentStep);
   const selectedIndex = workflowSteps.findIndex((step) => step.id === selectedStep);
 
@@ -54,31 +58,25 @@ export function SessionWorkflowStepper({
             Step {selectedIndex + 1} of {workflowSteps.length}
           </span>
         </div>
-        <div className="overflow-x-auto pb-1">
-          <div className="flex min-w-[680px] items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             {workflowSteps.map((step, index) => {
               const status = stepStatus(step.id, index, currentIndex, session, polls);
               const selected = selectedStep === step.id;
               return (
-                <div key={step.id} className="flex flex-1 items-center gap-2 last:flex-none">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedStep(step.id)}
-                    className={`group flex min-h-10 items-center gap-2 rounded-full border px-2 py-1.5 text-left transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${stepButtonTone(status, selected)}`}
-                    aria-current={selected ? "step" : undefined}
-                  >
-                    <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${stepCircleTone(status, selected)}`}>
-                      {status === "finish" ? <span className="size-2.5 rounded-full bg-current" /> : index + 1}
-                    </span>
-                    <span className="whitespace-nowrap text-sm font-semibold">{step.label}</span>
-                  </button>
-                  {index < workflowSteps.length - 1 ? (
-                    <div className={`h-px flex-1 ${index < currentIndex ? "bg-emerald-300" : "bg-zinc-300"}`} />
-                  ) : null}
-                </div>
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => setSelection({ currentStep, selectedStep: step.id })}
+                  className={`group flex min-h-10 items-center gap-2 rounded-full border px-2 py-1.5 text-left transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${stepButtonTone(status, selected)}`}
+                  aria-current={selected ? "step" : undefined}
+                >
+                  <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${stepCircleTone(status, selected)}`}>
+                    {status === "finish" ? <span className="size-2.5 rounded-full bg-current" /> : index + 1}
+                  </span>
+                  <span className="truncate text-sm font-semibold">{step.label}</span>
+                </button>
               );
             })}
-          </div>
         </div>
       </div>
 
@@ -130,10 +128,11 @@ function SelectedStepPanel({
   const rerunAction = rerunActionForStep(session.id, step, stepPolls);
 
   if (selectedPoll) {
+    const showStepActions = canManage && selectedPoll.status === "closed" && step !== "availability";
     return (
       <div className="space-y-4">
         <PollWorkflowCard poll={selectedPoll} canManage={canManage && isCurrent} />
-        {canManage && selectedPoll.status === "closed" ? (
+        {showStepActions ? (
           <StepActionCard
             nextAction={isCurrent ? actionForEmptyCurrent : undefined}
             rerunAction={rerunAction}

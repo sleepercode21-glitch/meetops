@@ -568,8 +568,8 @@ function CreateFinalTimingFromAvailabilityCard({ poll }: { poll: Poll }) {
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-zinc-950">Create Final Timing Poll</h2>
-      <p className="mt-1 text-sm text-zinc-600">Choose the best availability options for the final vote.</p>
+      <h2 className="text-lg font-semibold text-zinc-950">Choose final vote options</h2>
+      <p className="mt-1 text-sm text-zinc-600">Selected times will become the choices in the final timing poll.</p>
       <div className="mt-4 space-y-2">
         {ranked(poll.options).map((option) => (
           <label key={option.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3">
@@ -601,7 +601,7 @@ function CreateFinalTimingFromAvailabilityCard({ poll }: { poll: Poll }) {
         />
       </label>
       <Button type="button" tone="primary" className="mt-4 w-full sm:w-auto" disabled={pending} onClick={createFinalTimingPoll}>
-        {pending ? "Creating..." : "Create Final Timing Poll"}
+        {pending ? "Creating..." : "Create poll"}
       </Button>
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
     </Card>
