@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  return clearSession(request);
+  return NextResponse.redirect(new URL("/", request.nextUrl.origin));
 }
 
 export async function POST(request: NextRequest) {

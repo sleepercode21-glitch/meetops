@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ButtonLink } from "@/components/common/Buttons";
 import { getCurrentUser } from "@/lib/web-api";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
@@ -19,9 +18,14 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             >
               My Groups
             </Link>
-            <ButtonLink href="/api/auth/logout" tone="ghost" className="hidden sm:inline-flex">
-              Sign out
-            </ButtonLink>
+            <form action="/api/auth/logout" method="post" className="hidden sm:block">
+              <button
+                type="submit"
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-transparent bg-transparent px-3.5 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100"
+              >
+                Sign out
+              </button>
+            </form>
             <Link
               href="/profile"
               aria-label="Profile"
