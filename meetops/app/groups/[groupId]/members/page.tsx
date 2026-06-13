@@ -36,47 +36,102 @@ export default async function MembersPage({
             <ButtonLink href={`/groups/${groupId}/settings`} tone="ghost" className="rounded-b-none border-transparent border-x-0 border-t-0 px-2.5">Settings</ButtonLink>
           ) : null}
         </div>
-        <Card className="overflow-x-auto">
-          <div className="mb-4 text-sm text-zinc-600">
-            {members.length} {members.length === 1 ? "person" : "people"} in this group.
-          </div>
-          <table className="w-full min-w-[680px] text-left text-sm">
-            <thead className="text-xs uppercase text-zinc-500">
-              <tr>
-                <th className="py-3">Member</th>
-                <th>Role</th>
-                <th>Joined</th>
-                <th>Calendar</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {members.map((member) => (
-                <tr key={member.user_id}>
-                  <td className="py-3">
-                    <div className="font-medium text-zinc-950">
-                      {[member.firstname, member.lastname].filter(Boolean).join(" ") || member.email}
+        <Card>
+          <div className="space-y-3">
+            {members.map((member) => (
+              <div
+                key={member.user_id}
+                className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-4 md:grid-cols-[minmax(260px,1fr)_auto]"
+              >
+                <div className="flex min-w-0 gap-3">
+                  {member.profile_photo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={member.profile_photo}
+                      alt=""
+                      className="h-11 w-11 shrink-0 rounded-full border border-zinc-200 object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm font-semibold text-white">
+                      {memberInitials(member)}
                     </div>
-                    <div className="text-zinc-500">{member.email}</div>
-                  </td>
-                  <td><RoleBadge role={member.is_admin ? "admin" : "member"} /></td>
-                  <td>{new Date(member.joined_at).toLocaleDateString()}</td>
-                  <td>{member.calendar_events_scope_granted ? "Connected" : "Needs reconnect"}</td>
-                  <td>
-                    {currentUserIsAdmin ? (
-                      <MemberActions groupId={groupId} member={member} />
-                    ) : (
-                      <span className="text-zinc-500">No actions</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="truncate font-medium text-zinc-950">
+                        {memberName(member)}
+                      </div>
+                      <RoleBadge role={member.is_admin ? "admin" : "member"} />
+                    </div>
+                    <div className="truncate text-sm text-zinc-500">{member.email}</div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-600">
+                      <InfoChip label="Timezone" value={member.timezone ?? "Not set"} />
+                      <InfoChip label="Joined" value={formatDate(member.joined_at)} />
+                      <InfoChip
+                        label="Calendar"
+                        value={
+                          member.calendar_events_scope_granted
+                            ? "Ready"
+                            : member.calendar_connected
+                              ? "Reconnect"
+                              : "Not connected"
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-start md:justify-end">
+                  {currentUserIsAdmin ? (
+                    <MemberActions groupId={groupId} member={member} />
+                  ) : (
+                    <span className="text-sm text-zinc-500">No actions</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
       </div>
     </AuthenticatedPage>
   );
+}
+
+function InfoChip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1">
+      <span className="text-zinc-500">{label}: </span>
+      <span className="font-medium text-zinc-800">{value}</span>
+    </span>
+  );
+}
+
+function memberName(member: {
+  firstname: string | null;
+  lastname: string | null;
+  email: string;
+}) {
+  return [member.firstname, member.lastname].filter(Boolean).join(" ") || member.email;
+}
+
+function memberInitials(member: {
+  firstname: string | null;
+  lastname: string | null;
+  email: string;
+}) {
+  const name = memberName(member);
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function formatDate(value?: string | null) {
+  if (!value) {
+    return "Not available";
+  }
+  return new Date(value).toLocaleDateString();
 }
 
 async function getMembersData(groupId: string) {

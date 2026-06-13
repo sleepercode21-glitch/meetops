@@ -5,6 +5,7 @@ import { calendarScopeGranted, toId, toIso } from "@/lib/api/formatters";
 import { optionalString, parseBigIntParam } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+import { cancelCalendarEventForSession } from "@/lib/scheduling";
 
 type Context = {
   params: Promise<{ groupId: string }>;
@@ -92,6 +93,102 @@ export async function PATCH(request: NextRequest, context: Context) {
       name: group.name,
       description: group.description,
       updated_at: group.updatedAt.toISOString(),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function DELETE(request: NextRequest, context: Context) {
+  try {
+    const user = await requireAuth(request);
+    const { groupId: groupIdParam } = await context.params;
+    const groupId = parseBigIntParam(groupIdParam, "groupId");
+    await requireGroupAdmin(user.userId, groupId);
+
+    const sessionsWithCalendarEvents = await prisma.session.findMany({
+      where: {
+        groupId,
+        calendarEventId: { not: null },
+      },
+      select: { sessionId: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const calendarCancellationFailures: Array<{ session_id: number; message: string }> = [];
+    for (const session of sessionsWithCalendarEvents) {
+      const cancellation = await cancelCalendarEventForSession({
+        sessionId: session.sessionId,
+        actorUserId: user.userId,
+        reason: "group_deleted",
+      });
+      if (cancellation.outcome === "failed") {
+        calendarCancellationFailures.push({
+          session_id: Number(session.sessionId),
+          message: cancellation.message,
+        });
+      }
+    }
+
+    const sessionsToCancel = await prisma.session.findMany({
+      where: {
+        groupId,
+        status: { notIn: ["cancelled", "completed"] },
+      },
+      select: { sessionId: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.session.updateMany({
+        where: {
+          groupId,
+          status: { notIn: ["cancelled", "completed"] },
+        },
+        data: {
+          status: "cancelled",
+          calendarEventId: null,
+          meetLink: null,
+          schedulingError: null,
+        },
+      });
+
+      await tx.poll.updateMany({
+        where: {
+          session: { groupId },
+          status: { in: ["draft", "active"] },
+        },
+        data: {
+          status: "cancelled",
+          closedAt: new Date(),
+        },
+      });
+
+      if (sessionsToCancel.length > 0) {
+        await tx.auditLog.createMany({
+          data: sessionsToCancel.map((session) => ({
+            userId: user.userId,
+            groupId,
+            sessionId: session.sessionId,
+            action: "session_cancelled",
+            metadata: {
+              reason: "group_deleted",
+              group_deleted: true,
+            },
+          })),
+        });
+      }
+
+      await tx.group.delete({ where: { groupId } });
+    });
+
+    return dataResponse({
+      group_id: toId(groupId),
+      deleted: true,
+      sessions_cancelled: sessionsToCancel.length,
+      calendar_events_found: sessionsWithCalendarEvents.length,
+      calendar_events_cancelled: sessionsWithCalendarEvents.length - calendarCancellationFailures.length,
+      calendar_cancellation_failures: calendarCancellationFailures,
     });
   } catch (error) {
     return errorResponse(error);

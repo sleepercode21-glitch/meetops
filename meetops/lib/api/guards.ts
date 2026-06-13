@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api/errors";
+import { isPlatformOwnerUserId } from "@/lib/platform-owner";
 import { prisma } from "@/lib/prisma";
 
 export async function requireGroupMember(userId: bigint, groupId: bigint) {
@@ -11,11 +12,16 @@ export async function requireGroupMember(userId: bigint, groupId: bigint) {
     },
   });
 
-  if (!member) {
+  if (!member && !(await isPlatformOwnerUserId(userId))) {
     throw new ApiError("NOT_GROUP_MEMBER", "You are not a member of this group.");
   }
 
-  return member;
+  return member ?? {
+    groupId,
+    userId,
+    joinedAt: new Date(0),
+    isAdmin: true,
+  };
 }
 
 export async function requireGroupAdmin(userId: bigint, groupId: bigint) {

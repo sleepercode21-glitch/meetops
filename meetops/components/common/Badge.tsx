@@ -25,6 +25,7 @@ const pollTone: Record<PollStatus, string> = {
 };
 
 const roleTone: Record<UserRole | "host" | "meeting_owner", string> = {
+  owner: "bg-teal-900 text-white border-teal-900",
   admin: "bg-zinc-900 text-white border-zinc-900",
   member: "bg-white text-zinc-700 border-zinc-300",
   host: "bg-blue-50 text-blue-700 border-blue-200",

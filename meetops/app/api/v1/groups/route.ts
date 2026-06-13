@@ -9,11 +9,28 @@ import {
   optionalString,
 } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/auth/session";
+import { isPlatformOwnerEmail } from "@/lib/platform-owner";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request);
+    if (isPlatformOwnerEmail(user.email)) {
+      const groups = await prisma.group.findMany({
+        include: {
+          _count: { select: { members: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      return dataResponse(
+        groups.map((group) => ({
+          ...groupSummary(group, { isAdmin: true }),
+          platform_owner_access: true,
+        })),
+      );
+    }
+
     const memberships = await prisma.member.findMany({
       where: { userId: user.userId },
       include: {
@@ -65,6 +82,7 @@ export async function POST(request: NextRequest) {
       "invite_code_expires_at",
     );
     const shouldCreateInvite = inviteEnabled ?? true;
+    const platformOwner = isPlatformOwnerEmail(user.email);
 
     const group = await prisma.$transaction(async (tx) => {
       const created = await tx.group.create({
@@ -79,13 +97,15 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      await tx.member.create({
-        data: {
-          groupId: created.groupId,
-          userId: user.userId,
-          isAdmin: true,
-        },
-      });
+      if (!platformOwner) {
+        await tx.member.create({
+          data: {
+            groupId: created.groupId,
+            userId: user.userId,
+            isAdmin: true,
+          },
+        });
+      }
 
       return created;
     });

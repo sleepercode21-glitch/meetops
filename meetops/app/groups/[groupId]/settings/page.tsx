@@ -3,6 +3,7 @@ import { AuthenticatedPage } from "@/components/app-shell/AuthenticatedPage";
 import { ButtonLink } from "@/components/common/Buttons";
 import { Card, SectionTitle } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
+import { DeleteGroupForm } from "@/components/groups/DeleteGroupForm";
 import {
   GroupProfileForm,
   InviteSettingsForm,
@@ -44,6 +45,9 @@ export default async function GroupSettingsPage({
         </SettingsCard>
         <SettingsCard title="Meeting owner">
           <MeetingOwnerForm group={group} members={members} />
+        </SettingsCard>
+        <SettingsCard title="Danger zone">
+          <DeleteGroupForm group={group} />
         </SettingsCard>
       </div>
     </AuthenticatedPage>

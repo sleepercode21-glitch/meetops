@@ -43,6 +43,7 @@ export type ApiMe = {
   lastname: string | null;
   profile_photo: string | null;
   timezone: string;
+  platform_owner?: boolean;
 };
 
 export type ApiGoogleStatus = {
@@ -57,6 +58,7 @@ export type ApiGroupSummary = {
   name: string;
   description: string | null;
   is_admin: boolean;
+  platform_owner_access?: boolean;
   member_count: number;
   default_meeting_owner: number | null;
   created_at: string;
@@ -91,10 +93,15 @@ export type ApiMember = {
   firstname: string | null;
   lastname: string | null;
   profile_photo: string | null;
+  timezone?: string;
+  user_joined_at?: string;
+  profile_updated_at?: string;
   joined_at: string;
   is_admin: boolean;
   calendar_connected: boolean;
   calendar_events_scope_granted: boolean;
+  google_connected_at?: string | null;
+  google_updated_at?: string | null;
 };
 
 export type ApiSessionSummary = {
@@ -356,6 +363,7 @@ export function toUser(me: ApiMe, google: ApiGoogleStatus): User {
     timezone: me.timezone,
     avatarInitials: initials(name),
     hasCalendarScope: google.calendar_events_scope_granted,
+    platformOwner: Boolean(me.platform_owner),
   };
 }
 
@@ -364,9 +372,9 @@ export function toGroup(group: ApiGroupSummary): Group {
     id: String(group.group_id),
     name: group.name,
     description: group.description ?? "",
-    role: group.is_admin ? "admin" : "member",
+    role: group.platform_owner_access ? "owner" : group.is_admin ? "admin" : "member",
     memberCount: group.member_count,
-    adminCount: group.is_admin ? 1 : 0,
+    adminCount: group.platform_owner_access ? 0 : group.is_admin ? 1 : 0,
     upcomingSessionCount: 0,
     activePollCount: 0,
     inviteCode: "",

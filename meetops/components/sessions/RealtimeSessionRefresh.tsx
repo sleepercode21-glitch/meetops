@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 export function RealtimeSessionRefresh({
   enabled,
-  intervalMs = 2000,
+  intervalMs = 750,
 }: {
   enabled: boolean;
   intervalMs?: number;
@@ -25,6 +25,7 @@ export function RealtimeSessionRefresh({
     const tick = window.setInterval(() => {
       refreshVisible();
     }, intervalMs);
+    refreshVisible();
     window.addEventListener("focus", refreshVisible);
     document.addEventListener("visibilitychange", refreshVisible);
     return () => {

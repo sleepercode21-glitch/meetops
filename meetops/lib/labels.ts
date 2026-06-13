@@ -53,6 +53,7 @@ export const calendarInvitePolicyDescriptions: Record<
 };
 
 export const roleLabels: Record<UserRole | "host" | "meeting_owner", string> = {
+  owner: "Platform owner",
   admin: "Admin",
   member: "Member",
   host: "Host",

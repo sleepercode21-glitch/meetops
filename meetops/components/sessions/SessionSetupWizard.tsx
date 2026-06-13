@@ -33,7 +33,7 @@ export function SessionSetupWizard({
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <h1 className="truncate text-2xl font-semibold text-zinc-950">{session.topic ?? "Untitled session"}</h1>
             <SessionStatusPill status={derivedStatus(session)} />
-            <RealtimeSessionRefresh enabled={liveEnabled} intervalMs={1000} />
+            <RealtimeSessionRefresh enabled={liveEnabled} intervalMs={500} />
           </div>
         </div>
         {session.status === "scheduled" && session.meetLink ? (

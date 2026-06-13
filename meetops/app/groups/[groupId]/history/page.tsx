@@ -12,6 +12,7 @@ import {
   groupRole,
   type ApiGroupHistorySession,
 } from "@/lib/web-api";
+import type { UserRole } from "@/types/domain";
 
 export default async function GroupHistoryPage({
   params,
@@ -114,7 +115,7 @@ function GroupTabs({
   active,
 }: {
   groupId: string;
-  role: "admin" | "member";
+  role: UserRole;
   active: "sessions" | "members" | "history" | "settings";
 }) {
   return (
@@ -122,7 +123,7 @@ function GroupTabs({
       <Tab href={`/groups/${groupId}`} active={active === "sessions"}>Sessions</Tab>
       <Tab href={`/groups/${groupId}/members`} active={active === "members"}>Members</Tab>
       <Tab href={`/groups/${groupId}/history`} active={active === "history"}>History</Tab>
-      {role === "admin" ? (
+      {role === "admin" || role === "owner" ? (
         <Tab href={`/groups/${groupId}/settings`} active={active === "settings"}>Settings</Tab>
       ) : null}
     </div>

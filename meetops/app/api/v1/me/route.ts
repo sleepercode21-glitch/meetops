@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { ApiError, dataResponse, errorResponse } from "@/lib/api/errors";
 import { requireAuth } from "@/lib/auth/session";
+import { isPlatformOwnerEmail } from "@/lib/platform-owner";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -57,6 +58,7 @@ function toPublicUser(user: {
     lastname: user.lastname,
     profile_photo: user.profilePhoto,
     timezone: user.timezone,
+    platform_owner: isPlatformOwnerEmail(user.email),
     joined_at: user.joinedAt.toISOString(),
     updated_at: user.updatedAt.toISOString(),
   };

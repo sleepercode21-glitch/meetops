@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "member";
+export type UserRole = "admin" | "member" | "owner";
 
 export type SessionStatus =
   | "draft"
@@ -35,6 +35,7 @@ export type User = {
   timezone: string;
   avatarInitials: string;
   hasCalendarScope: boolean;
+  platformOwner?: boolean;
 };
 
 export type Group = {
