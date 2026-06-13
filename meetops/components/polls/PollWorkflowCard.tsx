@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { PollStatusBadge } from "@/components/common/Badge";
 import { Button, ButtonLink } from "@/components/common/Buttons";
@@ -12,20 +12,34 @@ import type { Poll, PollOption } from "@/types/domain";
 export function PollWorkflowCard({
   poll,
   canManage,
+  hostTimezone,
+  viewerTimezone,
 }: {
   poll: Poll;
   canManage: boolean;
+  hostTimezone?: string;
+  viewerTimezone?: string;
 }) {
   if (poll.type === "availability") {
-    return <AvailabilityPollCard poll={poll} canManage={canManage} />;
+    return <AvailabilityPollCard poll={poll} canManage={canManage} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />;
   }
   if (poll.type === "final_timing") {
-    return <FinalTimingPollCard poll={poll} canManage={canManage} />;
+    return <FinalTimingPollCard poll={poll} canManage={canManage} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />;
   }
   return <StandardPollCard poll={poll} canManage={canManage} />;
 }
 
-function AvailabilityPollCard({ poll, canManage }: { poll: Poll; canManage: boolean }) {
+function AvailabilityPollCard({
+  poll,
+  canManage,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  poll: Poll;
+  canManage: boolean;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -44,9 +58,9 @@ function AvailabilityPollCard({ poll, canManage }: { poll: Poll; canManage: bool
             subtitle="These results help the host choose the final timing options."
             poll={poll}
           />
-          <RankedResults options={rankedOptions} emptyText="No availability votes were submitted." />
+          <RankedResults options={rankedOptions} emptyText="No availability votes were submitted." hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
         </Card>
-        {canManage ? <CreateFinalTimingFromAvailabilityCard poll={poll} /> : null}
+        {canManage ? <CreateFinalTimingFromAvailabilityCard poll={poll} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} /> : null}
       </div>
     );
   }
@@ -78,13 +92,14 @@ function AvailabilityPollCard({ poll, canManage }: { poll: Poll; canManage: bool
       <div className="mt-4 space-y-3">
         {canManage && poll.status === "active" ? (
           <>
-            <AvailabilityLiveSummary options={rankedOptions} />
-            <RankedResults options={rankedOptions} emptyText="No availability responses yet." />
+            <AvailabilityLiveSummary options={rankedOptions} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
+            <RankedResults options={rankedOptions} emptyText="No availability responses yet." hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
           </>
-        ) : canManage || poll.status !== "active" ? (
-          poll.options.map((option) => <WindowRow key={option.id} option={option} />)
+        ) : null}
+        {poll.status === "active" ? (
+          <AvailabilityResponseForm poll={poll} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
         ) : (
-          <AvailabilityResponseForm poll={poll} />
+          poll.options.map((option) => <WindowRow key={option.id} option={option} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />)
         )}
       </div>
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
@@ -93,9 +108,10 @@ function AvailabilityPollCard({ poll, canManage }: { poll: Poll; canManage: bool
   );
 }
 
-function AvailabilityLiveSummary({ options }: { options: PollOption[] }) {
+function AvailabilityLiveSummary({ options, hostTimezone, viewerTimezone }: { options: PollOption[]; hostTimezone?: string; viewerTimezone?: string }) {
   const topVoteCount = options[0]?.voteCount ?? 0;
   const best = topVoteCount > 0 ? options.filter((option) => option.voteCount === topVoteCount) : [];
+  const topOption = best[0];
   return (
     <div className="rounded-lg border border-teal-200 bg-teal-50/80 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -103,7 +119,7 @@ function AvailabilityLiveSummary({ options }: { options: PollOption[] }) {
           <div className="text-xs font-semibold uppercase tracking-wide text-teal-800">Current best</div>
           {best.length ? (
             <div className="mt-1 text-sm font-medium text-teal-950">
-              {best.length > 1 ? `${best.length} times tied` : `${formatDay(best[0].startAt)} · ${formatTimeRange(best[0].startAt, best[0].endAt)}`}
+              {best.length > 1 ? `${best.length} times tied` : <DualTimeRange option={topOption} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} compact />}
             </div>
           ) : (
             <div className="mt-1 text-sm font-medium text-teal-950">Waiting for availability</div>
@@ -117,7 +133,17 @@ function AvailabilityLiveSummary({ options }: { options: PollOption[] }) {
   );
 }
 
-function FinalTimingPollCard({ poll, canManage }: { poll: Poll; canManage: boolean }) {
+function FinalTimingPollCard({
+  poll,
+  canManage,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  poll: Poll;
+  canManage: boolean;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+}) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(poll.currentUserVoteIds);
   const [pending, setPending] = useState<string | null>(null);
@@ -152,7 +178,7 @@ function FinalTimingPollCard({ poll, canManage }: { poll: Poll; canManage: boole
           subtitle="The final timing poll is closed."
           poll={poll}
         />
-        <RankedResults options={ranked(poll.options)} emptyText="No final timing votes were submitted." />
+        <RankedResults options={ranked(poll.options)} emptyText="No final timing votes were submitted." hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
       </Card>
     );
   }
@@ -184,23 +210,27 @@ function FinalTimingPollCard({ poll, canManage }: { poll: Poll; canManage: boole
       <div className="mt-4 space-y-3">
         {canManage && poll.status === "active" ? (
           <>
-            <FinalTimingLiveSummary options={ranked(poll.options)} />
-            <RankedResults options={ranked(poll.options)} emptyText="No final timing votes yet." />
+            <FinalTimingLiveSummary options={ranked(poll.options)} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
           </>
-        ) : (
+        ) : null}
+        {poll.status === "active" ? (
           poll.options.map((option) => (
             <FinalTimingOptionRadioRow
               key={option.id}
               option={option}
               checked={selected.includes(option.id)}
-              disabled={canManage || poll.status !== "active" || pending === "vote"}
+              disabled={poll.status !== "active" || pending === "vote"}
               onSelect={() => setSelected([option.id])}
+              hostTimezone={hostTimezone}
+              viewerTimezone={viewerTimezone}
             />
           ))
+        ) : (
+          <RankedResults options={ranked(poll.options)} emptyText="No final timing votes yet." hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
         )}
       </div>
 
-      {!canManage && poll.status === "active" ? (
+      {poll.status === "active" ? (
         <div className="mt-4">
           <Button
             type="button"
@@ -245,7 +275,7 @@ function StandardPollCard({ poll, canManage }: { poll: Poll; canManage: boolean 
   }
 
   const showResults = poll.resultsVisible || poll.status !== "active" || canManage;
-  const resultOnly = showResults && (canManage || poll.status !== "active");
+  const resultOnly = poll.status !== "active";
 
   return (
     <Card>
@@ -279,13 +309,13 @@ function StandardPollCard({ poll, canManage }: { poll: Poll; canManage: boolean 
                 option={option}
                 checked={checked}
                 multiChoice={poll.multiChoice}
-                disabled={canManage || poll.status !== "active" || pending === "vote"}
+                disabled={poll.status !== "active" || pending === "vote"}
                 showResults={showResults}
                 totalVotes={totalVotes(poll.options)}
                 onClick={() => {
                   const next = poll.multiChoice ? toggleMulti(selected, option.id) : [option.id];
                   setSelected(next);
-                  if (!canManage && poll.status === "active") void submitVote(next);
+                  if (poll.status === "active") void submitVote(next);
                 }}
               />
             );
@@ -299,9 +329,10 @@ function StandardPollCard({ poll, canManage }: { poll: Poll; canManage: boolean 
   );
 }
 
-function FinalTimingLiveSummary({ options }: { options: PollOption[] }) {
+function FinalTimingLiveSummary({ options, hostTimezone, viewerTimezone }: { options: PollOption[]; hostTimezone?: string; viewerTimezone?: string }) {
   const topVoteCount = options[0]?.voteCount ?? 0;
   const leaders = topVoteCount > 0 ? options.filter((option) => option.voteCount === topVoteCount) : [];
+  const leader = leaders[0];
   return (
     <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -312,7 +343,7 @@ function FinalTimingLiveSummary({ options }: { options: PollOption[] }) {
               ? "Waiting for votes"
               : leaders.length > 1
                 ? `${leaders.length} times tied`
-                : `${formatDay(leaders[0].startAt)} · ${formatTimeRange(leaders[0].startAt, leaders[0].endAt)}`}
+                : <DualTimeRange option={leader} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} compact />}
           </div>
         </div>
         <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-800">
@@ -358,8 +389,25 @@ type AvailabilityResponse = {
   end_at: string;
 };
 
-function AvailabilityResponseForm({ poll }: { poll: Poll }) {
+type AvailabilityRecommendation = {
+  option_id: number;
+  start_at: string;
+  end_at: string;
+  available_count: number;
+  duration_minutes: number;
+};
+
+function AvailabilityResponseForm({
+  poll,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  poll: Poll;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+}) {
   const router = useRouter();
+  const displayTimezone = useViewerTimezone(viewerTimezone);
   const [values, setValues] = useState<Record<string, { startAt: string; endAt: string }>>({});
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -374,8 +422,8 @@ function AvailabilityResponseForm({ poll }: { poll: Poll }) {
         const next: Record<string, { startAt: string; endAt: string }> = {};
         for (const response of body?.data ?? []) {
           next[String(response.option_id)] = {
-            startAt: toLocalDateTime(response.start_at),
-            endAt: toLocalDateTime(response.end_at),
+            startAt: toDateTimeInputInZone(response.start_at, displayTimezone),
+            endAt: toDateTimeInputInZone(response.end_at, displayTimezone),
           };
         }
         setValues(next);
@@ -385,7 +433,7 @@ function AvailabilityResponseForm({ poll }: { poll: Poll }) {
     return () => {
       cancelled = true;
     };
-  }, [poll.id]);
+  }, [displayTimezone, poll.id]);
 
   function update(optionId: string, patch: Partial<{ startAt: string; endAt: string }>) {
     setValues((current) => ({
@@ -404,16 +452,18 @@ function AvailabilityResponseForm({ poll }: { poll: Poll }) {
       if (value.endAt <= value.startAt) {
         throw new Error("End time must be after start time.");
       }
-      if (option.startAt && value.startAt < toLocalDateTime(option.startAt)) {
+      const startIso = zonedInputToIso(value.startAt, displayTimezone);
+      const endIso = zonedInputToIso(value.endAt, displayTimezone);
+      if (option.startAt && new Date(startIso) < new Date(option.startAt)) {
         throw new Error("Start time must be inside the host window.");
       }
-      if (option.endAt && value.endAt > toLocalDateTime(option.endAt)) {
+      if (option.endAt && new Date(endIso) > new Date(option.endAt)) {
         throw new Error("End time must be inside the host window.");
       }
       return [{
         option_id: Number(option.id),
-        start_at: new Date(value.startAt).toISOString(),
-        end_at: new Date(value.endAt).toISOString(),
+        start_at: startIso,
+        end_at: endIso,
       }];
     });
 
@@ -447,14 +497,17 @@ function AvailabilityResponseForm({ poll }: { poll: Poll }) {
         const value = values[option.id] ?? { startAt: "", endAt: "" };
         return (
           <div key={option.id} className="rounded-lg border border-zinc-200 bg-white p-4">
-            <TimeOptionContent option={option} showLabel={false} />
+            <TimeOptionContent option={option} showLabel={false} hostTimezone={hostTimezone} viewerTimezone={displayTimezone} preferViewer />
+            <p className="mt-3 text-sm font-medium text-teal-800">
+              Choose any time inside the green “Your time” window above. These inputs use {zoneLabel(displayTimezone)}.
+            </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-600">I am free from</span>
+                <span className="mb-1 block text-xs font-medium text-zinc-600">I am free from (your time)</span>
                 <input
                   type="datetime-local"
-                  min={toLocalDateTime(option.startAt)}
-                  max={toLocalDateTime(option.endAt)}
+                  min={toDateTimeInputInZone(option.startAt, displayTimezone)}
+                  max={toDateTimeInputInZone(option.endAt, displayTimezone)}
                   value={value.startAt}
                   disabled={!loaded || pending}
                   className="min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
@@ -462,11 +515,11 @@ function AvailabilityResponseForm({ poll }: { poll: Poll }) {
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-600">until</span>
+                <span className="mb-1 block text-xs font-medium text-zinc-600">until (your time)</span>
                 <input
                   type="datetime-local"
-                  min={value.startAt || toLocalDateTime(option.startAt)}
-                  max={toLocalDateTime(option.endAt)}
+                  min={value.startAt || toDateTimeInputInZone(option.startAt, displayTimezone)}
+                  max={toDateTimeInputInZone(option.endAt, displayTimezone)}
                   value={value.endAt}
                   disabled={!loaded || pending}
                   className="min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
@@ -474,6 +527,12 @@ function AvailabilityResponseForm({ poll }: { poll: Poll }) {
                 />
               </label>
             </div>
+            <AvailabilitySelectionPreview
+              startAt={value.startAt}
+              endAt={value.endAt}
+              hostTimezone={hostTimezone}
+              viewerTimezone={displayTimezone}
+            />
           </div>
         );
       })}
@@ -485,10 +544,45 @@ function AvailabilityResponseForm({ poll }: { poll: Poll }) {
   );
 }
 
-function WindowRow({ option }: { option: PollOption }) {
+function WindowRow({ option, hostTimezone, viewerTimezone }: { option: PollOption; hostTimezone?: string; viewerTimezone?: string }) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4">
-      <TimeOptionContent option={option} showLabel={false} />
+      <TimeOptionContent option={option} showLabel={false} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
+    </div>
+  );
+}
+
+function AvailabilitySelectionPreview({
+  startAt,
+  endAt,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  startAt: string;
+  endAt: string;
+  hostTimezone?: string;
+  viewerTimezone: string;
+}) {
+  if (!startAt || !endAt) {
+    return null;
+  }
+
+  const sourceTimezone = hostTimezone || viewerTimezone;
+  const startIso = zonedInputToIso(startAt, viewerTimezone);
+  const endIso = zonedInputToIso(endAt, viewerTimezone);
+  const viewerText = formatRangeInZone(startIso, endIso, viewerTimezone);
+  const hostText = formatRangeInZone(startIso, endIso, sourceTimezone);
+
+  return (
+    <div className="mt-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-950">
+      <div className="font-medium">Your selection: {viewerText}</div>
+      {sourceTimezone === viewerTimezone ? (
+        <div className="mt-0.5 text-xs text-teal-800">This is also the host-visible time.</div>
+      ) : (
+        <div className="mt-0.5 text-xs text-teal-800">
+          Host sees: {hostText} ({zoneLabel(sourceTimezone)})
+        </div>
+      )}
     </div>
   );
 }
@@ -498,11 +592,15 @@ function FinalTimingOptionRadioRow({
   checked,
   disabled,
   onSelect,
+  hostTimezone,
+  viewerTimezone,
 }: {
   option: PollOption;
   checked: boolean;
   disabled: boolean;
   onSelect: () => void;
+  hostTimezone?: string;
+  viewerTimezone?: string;
 }) {
   return (
     <button
@@ -517,17 +615,28 @@ function FinalTimingOptionRadioRow({
       <span className={`mt-1 flex size-5 shrink-0 items-center justify-center rounded-full border ${checked ? "border-blue-700 bg-blue-700" : "border-zinc-400 bg-white"}`}>
         {checked ? <span className="size-2 rounded-full bg-white" /> : null}
       </span>
-      <TimeOptionContent option={option} />
+      <TimeOptionContent option={option} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
     </button>
   );
 }
 
-function TimeOptionContent({ option, showLabel = true }: { option: PollOption; showLabel?: boolean }) {
+function TimeOptionContent({
+  option,
+  showLabel = true,
+  hostTimezone,
+  viewerTimezone,
+  preferViewer = false,
+}: {
+  option: PollOption;
+  showLabel?: boolean;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+  preferViewer?: boolean;
+}) {
   const visibleLabel = showLabel && !isGeneratedTimeLabel(option.label) ? option.label : "";
   return (
     <span className="min-w-0">
-      <span className="block font-medium text-zinc-950">{formatDay(option.startAt)}</span>
-      <span className="mt-1 block text-sm text-zinc-700">{formatTimeRange(option.startAt, option.endAt)}</span>
+      <DualTimeRange option={option} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} preferViewer={preferViewer} />
       {visibleLabel ? <span className="mt-1 block text-sm text-zinc-500">{visibleLabel}</span> : null}
     </span>
   );
@@ -601,7 +710,17 @@ function CompactResults({ options, emptyText }: { options: PollOption[]; emptyTe
   );
 }
 
-function RankedResults({ options, emptyText }: { options: PollOption[]; emptyText: string }) {
+function RankedResults({
+  options,
+  emptyText,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  options: PollOption[];
+  emptyText: string;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+}) {
   if (!options.some((option) => option.voteCount > 0)) {
     return <p className="mt-4 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">{emptyText}</p>;
   }
@@ -617,9 +736,7 @@ function RankedResults({ options, emptyText }: { options: PollOption[]; emptyTex
                 {index + 1}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-zinc-950">
-                  {formatDay(option.startAt)} · {formatTimeRange(option.startAt, option.endAt)}
-                </div>
+                <DualTimeRange option={option} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
                 {!isGeneratedTimeLabel(option.label) ? <div className="mt-1 text-sm text-zinc-500">{option.label}</div> : null}
                 <div className="mt-2 text-sm text-zinc-600">
                   {option.voteCount} {option.voteCount === 1 ? "person" : "people"} available
@@ -648,18 +765,45 @@ function ResultMeter({ option, totalVotes: votesTotal, percent }: { option: Poll
   );
 }
 
-function CreateFinalTimingFromAvailabilityCard({ poll }: { poll: Poll }) {
+function CreateFinalTimingFromAvailabilityCard({
+  poll,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  poll: Poll;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+}) {
   const router = useRouter();
-  const topOptions = useMemo(() => ranked(poll.options).slice(0, 3), [poll.options]);
-  const [selected, setSelected] = useState<string[]>(topOptions.map((option) => option.id));
-  const [deadline, setDeadline] = useState(() => toLocalDateTime(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()));
-  const [minDeadline] = useState(() => toLocalDateTime(new Date(Date.now() + 60_000).toISOString()));
+  const [recommendations, setRecommendations] = useState<AvailabilityRecommendation[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const displayTimezone = useViewerTimezone(viewerTimezone);
+  const [deadline, setDeadline] = useState(() => toDateTimeInputInZone(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), displayTimezone));
+  const [minDeadline] = useState(() => toDateTimeInputInZone(new Date(Date.now() + 60_000).toISOString(), displayTimezone));
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/v1/polls/${poll.id}/availability-recommendations`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((body: { data?: AvailabilityRecommendation[] } | null) => {
+        if (cancelled) return;
+        const next = body?.data ?? [];
+        setRecommendations(next);
+        setSelected(next.slice(0, 3).map(recommendationKey));
+      })
+      .catch(() => {
+        if (!cancelled) setRecommendations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [poll.id]);
+
   async function createFinalTimingPoll() {
     if (selected.length < 1) {
-      setMessage("Choose at least one option for the final vote.");
+      setMessage("Choose at least one recommended time for the final vote.");
       return;
     }
     if (!deadline || deadline <= minDeadline) {
@@ -672,8 +816,13 @@ function CreateFinalTimingFromAvailabilityCard({ poll }: { poll: Poll }) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        option_ids: selected.map(Number),
-        deadline: new Date(deadline).toISOString(),
+        windows: recommendations
+          .filter((recommendation) => selected.includes(recommendationKey(recommendation)))
+          .map((recommendation) => ({
+            start_at: recommendation.start_at,
+            end_at: recommendation.end_at,
+          })),
+        deadline: zonedInputToIso(deadline, displayTimezone),
       }),
     });
     setPending(false);
@@ -687,26 +836,31 @@ function CreateFinalTimingFromAvailabilityCard({ poll }: { poll: Poll }) {
   return (
     <Card>
       <h2 className="text-lg font-semibold text-zinc-950">Choose final vote options</h2>
-      <p className="mt-1 text-sm text-zinc-600">Selected times will become the choices in the final timing poll.</p>
+      <p className="mt-1 text-sm text-zinc-600">Selected overlap windows become the choices in the final timing poll.</p>
       <div className="mt-4 space-y-2">
-        {ranked(poll.options).map((option) => (
-          <label key={option.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3">
-            <input
-              type="checkbox"
-              className="mt-1 size-4"
-              checked={selected.includes(option.id)}
-              onChange={() => setSelected((current) => toggleMulti(current, option.id))}
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block font-medium text-zinc-950">
-                {formatDay(option.startAt)} · {formatTimeRange(option.startAt, option.endAt)}
+        {recommendations.length ? recommendations.map((recommendation) => {
+          const key = recommendationKey(recommendation);
+          return (
+            <label key={key} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3">
+              <input
+                type="checkbox"
+                className="mt-1 size-4"
+                checked={selected.includes(key)}
+                onChange={() => setSelected((current) => toggleMulti(current, key))}
+              />
+              <span className="min-w-0 flex-1">
+                <DualTimeRange option={recommendationOption(recommendation)} hostTimezone={hostTimezone} viewerTimezone={displayTimezone} />
+                <span className="mt-1 block text-sm text-zinc-500">
+                  {recommendation.available_count} {recommendation.available_count === 1 ? "person" : "people"} available · {recommendation.duration_minutes} min overlap
+                </span>
               </span>
-              <span className="mt-1 block text-sm text-zinc-500">
-                {option.voteCount} {option.voteCount === 1 ? "vote" : "votes"}{!isGeneratedTimeLabel(option.label) ? ` · ${option.label}` : ""}
-              </span>
-            </span>
-          </label>
-        ))}
+            </label>
+          );
+        }) : (
+          <p className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
+            No overlapping availability was submitted. Ask members to add availability or pick a timing manually.
+          </p>
+        )}
       </div>
       <label className="mt-4 block">
         <span className="text-sm font-medium text-zinc-950">Final vote deadline</span>
@@ -718,7 +872,7 @@ function CreateFinalTimingFromAvailabilityCard({ poll }: { poll: Poll }) {
           className="mt-1 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
         />
       </label>
-      <Button type="button" tone="primary" className="mt-4 w-full sm:w-auto" disabled={pending} onClick={createFinalTimingPoll}>
+      <Button type="button" tone="primary" className="mt-4 w-full sm:w-auto" disabled={pending || !recommendations.length} onClick={createFinalTimingPoll}>
         {pending ? "Creating..." : "Create poll"}
       </Button>
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
@@ -786,6 +940,20 @@ function toggleMulti(current: string[], optionId: string) {
     : [...current, optionId];
 }
 
+function recommendationKey(recommendation: AvailabilityRecommendation) {
+  return `${recommendation.start_at}|${recommendation.end_at}`;
+}
+
+function recommendationOption(recommendation: AvailabilityRecommendation): PollOption {
+  return {
+    id: recommendationKey(recommendation),
+    label: `${recommendation.start_at} - ${recommendation.end_at}`,
+    startAt: recommendation.start_at,
+    endAt: recommendation.end_at,
+    voteCount: recommendation.available_count,
+  };
+}
+
 function ranked(options: PollOption[]) {
   return [...options].sort((a, b) => b.voteCount - a.voteCount || startTime(a).getTime() - startTime(b).getTime());
 }
@@ -798,33 +966,164 @@ function totalVotes(options: PollOption[]) {
   return options.reduce((sum, option) => sum + option.voteCount, 0);
 }
 
-function formatDay(value?: string) {
-  if (!value) return "Time";
-  return new Date(value).toLocaleDateString(undefined, {
+function DualTimeRange({
+  option,
+  hostTimezone,
+  viewerTimezone,
+  compact = false,
+  preferViewer = false,
+}: {
+  option: PollOption;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+  compact?: boolean;
+  preferViewer?: boolean;
+}) {
+  const displayTimezone = useViewerTimezone(viewerTimezone);
+  const sourceTimezone = hostTimezone || displayTimezone;
+  const hostText = formatRangeInZone(option.startAt, option.endAt, sourceTimezone);
+  const viewerText = formatRangeInZone(option.startAt, option.endAt, displayTimezone);
+  const sameZone = sourceTimezone === displayTimezone;
+
+  if (compact) {
+    return (
+      <span className="block">
+        <span className="block font-medium text-zinc-950">{hostText}</span>
+        <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+          Host time · {zoneLabel(sourceTimezone)}
+          {sameZone ? " · also your time" : ` · Your time: ${viewerText} (${zoneLabel(displayTimezone)})`}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="block">
+      {preferViewer && !sameZone ? (
+        <>
+          <span className="block font-medium text-teal-900">Your time · {viewerText}</span>
+          <span className="mt-1 block text-xs text-zinc-500">
+            Host time · {hostText} ({zoneLabel(sourceTimezone)})
+          </span>
+        </>
+      ) : sameZone ? (
+        <>
+          <span className="block font-medium text-zinc-950">{hostText}</span>
+          <span className="mt-1 block text-sm font-medium text-teal-800">This is your local time.</span>
+        </>
+      ) : (
+        <>
+          <span className="block font-medium text-zinc-950">{hostText}</span>
+          <span className="mt-1 block text-xs text-zinc-500">Host time · {zoneLabel(sourceTimezone)}</span>
+          <span className="mt-1 block text-sm font-medium text-teal-800">
+            Your time · {viewerText} ({zoneLabel(displayTimezone)})
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
+function useViewerTimezone(savedTimezone?: string) {
+  return useSyncExternalStore(
+    () => () => undefined,
+    () => savedTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    () => savedTimezone || "UTC",
+  );
+}
+
+function formatRangeInZone(start?: string, end?: string, timeZone = "UTC") {
+  if (!start) return "Time not set";
+  const sameDay = end && dateKeyInZone(start, timeZone) === dateKeyInZone(end, timeZone);
+  const startText = new Intl.DateTimeFormat("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
-  });
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(new Date(start));
+  if (!end) return startText;
+  const endText = new Intl.DateTimeFormat("en-US", sameDay ? {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  } : {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(new Date(end));
+  return `${startText} - ${endText}`;
 }
 
-function formatTimeRange(start?: string, end?: string) {
-  if (!start) return "Time not set";
-  const startDate = new Date(start);
-  const endDate = end ? new Date(end) : null;
-  const startText = startDate.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  const endText = endDate?.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  return endText ? `${startText} - ${endText}` : startText;
+function dateKeyInZone(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).format(new Date(value));
+}
+
+function zoneLabel(timeZone: string) {
+  if (timeZone === "America/Phoenix") return "Arizona time";
+  return timeZone.replaceAll("_", " ");
 }
 
 function isGeneratedTimeLabel(label: string) {
   return /^\d{4}-\d{2}-\d{2}T.* - \d{4}-\d{2}-\d{2}T/.test(label);
 }
 
-function toLocalDateTime(value?: string) {
+function toDateTimeInputInZone(value: string | undefined, timeZone: string) {
   if (!value) return "";
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  const parts = dateTimePartsInZone(new Date(value), timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+function zonedInputToIso(value: string, timeZone: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) return new Date(value).toISOString();
+  const [, year, month, day, hour, minute] = match;
+  const utcGuess = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)));
+  const firstPass = new Date(utcGuess.getTime() - offsetForZone(utcGuess, timeZone));
+  const corrected = new Date(utcGuess.getTime() - offsetForZone(firstPass, timeZone));
+  return corrected.toISOString();
+}
+
+function offsetForZone(date: Date, timeZone: string) {
+  const parts = dateTimePartsInZone(date, timeZone);
+  const wallAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+  );
+  const roundedDate = Math.floor(date.getTime() / 60000) * 60000;
+  return wallAsUtc - roundedDate;
+}
+
+function dateTimePartsInZone(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: value.year,
+    month: value.month,
+    day: value.day,
+    hour: value.hour === "24" ? "00" : value.hour,
+    minute: value.minute,
+  };
 }
 
 async function apiMessage(response: Response, fallback: string) {

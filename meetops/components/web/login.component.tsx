@@ -1,3 +1,5 @@
+import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
+
 export function LoginComponent() {
   return (
     <main className="grid min-h-screen place-items-center bg-[linear-gradient(180deg,#e6f5ef_0,#f6f7f4_48%,#ffffff_100%)] p-4 text-zinc-950">
@@ -12,12 +14,7 @@ export function LoginComponent() {
         <p className="mt-5 text-sm leading-6 text-zinc-600">
           Join a group, vote on topic and time, then create the Calendar invite and Meet link from the winning slot.
         </p>
-        <a
-          href="/api/auth/google/start"
-          className="mt-5 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-teal-900 bg-teal-900 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-teal-800"
-        >
-          Continue with Google
-        </a>
+        <GoogleLoginButton className="mt-5 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-teal-900 bg-teal-900 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-teal-800" />
       </section>
     </main>
   );

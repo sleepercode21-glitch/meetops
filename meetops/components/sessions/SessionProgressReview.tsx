@@ -26,6 +26,7 @@ export function SessionProgressReview({
   polls,
   session,
   canManage,
+  viewerTimezone,
   currentContent,
 }: {
   title: string;
@@ -34,6 +35,7 @@ export function SessionProgressReview({
   polls: Poll[];
   session: Session;
   canManage: boolean;
+  viewerTimezone?: string;
   currentContent?: ReactNode;
 }) {
   const [selectedStep, setSelectedStep] = useState(currentStep);
@@ -94,6 +96,8 @@ export function SessionProgressReview({
                   key={poll.id}
                   poll={poll}
                   canManage={canManage && (selectedIsCurrent || poll.status === "closed")}
+                  hostTimezone={session.hostTimezone}
+                  viewerTimezone={viewerTimezone}
                 />
               ))}
             </div>

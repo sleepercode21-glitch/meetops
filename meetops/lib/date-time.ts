@@ -1,28 +1,34 @@
-const displayFormatter = new Intl.DateTimeFormat("en-US", {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-const timeFormatter = new Intl.DateTimeFormat("en-US", {
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-export function formatDateTime(value?: string) {
-  if (!value) return "Not scheduled";
-  return displayFormatter.format(new Date(value));
+function displayFormatter(timeZone?: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    ...(timeZone ? { timeZone } : {}),
+  });
 }
 
-export function formatDateRange(start?: string, end?: string) {
+function timeFormatter(timeZone?: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    ...(timeZone ? { timeZone } : {}),
+  });
+}
+
+export function formatDateTime(value?: string, timeZone?: string) {
+  if (!value) return "Not scheduled";
+  return displayFormatter(timeZone).format(new Date(value));
+}
+
+export function formatDateRange(start?: string, end?: string, timeZone?: string) {
   if (!start) return "Not scheduled";
   const startDate = new Date(start);
   const endDate = end ? new Date(end) : undefined;
-  const startText = displayFormatter.format(startDate);
+  const startText = displayFormatter(timeZone).format(startDate);
   if (!endDate) return startText;
-  return `${startText}-${timeFormatter.format(endDate)}`;
+  return `${startText} - ${timeFormatter(timeZone).format(endDate)}`;
 }
 
 export function relativeDeadline(value?: string) {

@@ -10,10 +10,12 @@ export function SessionSetupWizard({
   session,
   polls,
   group,
+  viewerTimezone,
 }: {
   session: Session;
   polls: Poll[];
   group: ApiGroupDetail;
+  viewerTimezone?: string;
 }) {
   const canManage = Boolean(session.currentUserCanManage);
   const canManageFlow = canManage && !terminalStatus(session.status);
@@ -47,6 +49,7 @@ export function SessionSetupWizard({
           polls={polls}
           canManage={canManageFlow}
           nextAction={nextAction}
+          viewerTimezone={viewerTimezone}
           controls={
             canManage && !terminalStatus(session.status) ? (
               <SessionActions session={session} canManage={canManage} />

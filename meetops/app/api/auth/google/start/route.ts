@@ -4,6 +4,7 @@ import {
   getGoogleRedirectUri,
   isPlaceholder,
   OAUTH_STATE_COOKIE_NAME,
+  OAUTH_TIMEZONE_COOKIE_NAME,
 } from "@/lib/auth/session";
 import { ApiError, errorResponse } from "@/lib/api/errors";
 
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     const redirectTo = request.nextUrl.searchParams.get("redirect_to") ?? "/dashboard";
+    const timezone = validTimezone(request.nextUrl.searchParams.get("timezone"));
     const state = createOAuthState(redirectTo);
     const authUrl = new URL(googleAuthUrl);
 
@@ -44,9 +46,28 @@ export async function GET(request: NextRequest) {
       path: "/",
       maxAge: 60 * 10,
     });
+    if (timezone) {
+      response.cookies.set(OAUTH_TIMEZONE_COOKIE_NAME, timezone, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 10,
+      });
+    }
 
     return response;
   } catch (error) {
     return errorResponse(error);
+  }
+}
+
+function validTimezone(value: string | null) {
+  if (!value) return null;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: value });
+    return value;
+  } catch {
+    return null;
   }
 }

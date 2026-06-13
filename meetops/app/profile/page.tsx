@@ -1,6 +1,7 @@
 import { AuthenticatedPage } from "@/components/app-shell/AuthenticatedPage";
 import { Card, SectionTitle } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
+import { TimezoneForm } from "@/components/profile/TimezoneForm";
 import { getCurrentUser } from "@/lib/web-api";
 
 export default async function ProfilePage() {
@@ -15,6 +16,9 @@ export default async function ProfilePage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <Info label="Timezone" value={currentUser.timezone} />
             <Info label="Calendar permission" value={currentUser.hasCalendarScope ? "Connected" : "Needs reconnect"} />
+          </div>
+          <div className="mt-4">
+            <TimezoneForm currentTimezone={currentUser.timezone} />
           </div>
         </Card>
       </div>

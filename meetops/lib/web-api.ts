@@ -112,6 +112,7 @@ export type ApiSessionSummary = {
     email: string;
     firstname: string | null;
     lastname: string | null;
+    timezone: string;
   };
   current_user_can_manage: boolean;
   created_at: string;
@@ -393,6 +394,7 @@ export function toSession(session: ApiSessionSummary): Session {
     groupId: String(session.group_id),
     hostId: String(session.host.user_id),
     hostName,
+    hostTimezone: session.host.timezone,
     topic: session.topic ?? undefined,
     description: session.description ?? undefined,
     status: session.status,

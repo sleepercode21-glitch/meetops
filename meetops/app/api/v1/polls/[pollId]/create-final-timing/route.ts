@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { ApiError, dataResponse, errorResponse } from "@/lib/api/errors";
 import { requirePollManager } from "@/lib/api/guards";
 import { parseBigIntParam, requiredDate } from "@/lib/api/validation";
@@ -6,6 +7,12 @@ import { requireAuth } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 
 type Context = { params: Promise<{ pollId: string }> };
+
+type ResponseRow = {
+  option_id: bigint;
+  start_at: Date;
+  end_at: Date;
+};
 
 export async function POST(request: NextRequest, context: Context) {
   try {
@@ -48,6 +55,9 @@ export async function POST(request: NextRequest, context: Context) {
     if (selectedOptions.some((option) => !option.startAt || !option.endAt)) {
       throw new ApiError("INVALID_POLL_OPTION", "Availability options must have start and end times.");
     }
+    const selectedOptionWindows = optionIds.length
+      ? await bestWindowsForOptions(pollId, optionIds, selectedOptions)
+      : [];
 
     const created = await prisma.$transaction(async (tx) => {
       await tx.poll.updateMany({
@@ -71,11 +81,11 @@ export async function POST(request: NextRequest, context: Context) {
         },
       });
 
-      for (const option of selectedOptions) {
+      for (const option of selectedOptionWindows) {
         await tx.pollOption.create({
           data: {
             pollId: finalPoll.pollId,
-            label: option.label,
+            label: generatedOptionLabel(option.startAt, option.endAt),
             startAt: option.startAt,
             endAt: option.endAt,
           },
@@ -108,6 +118,7 @@ export async function POST(request: NextRequest, context: Context) {
             source: "availability_results",
             source_poll_id: Number(pollId),
             source_option_ids: optionIds.map(Number),
+            source_option_windows: selectedOptionWindows.map((window) => ({ start_at: window.startAt.toISOString(), end_at: window.endAt.toISOString() })),
             source_windows: windows.map((window) => ({ start_at: window.startAt.toISOString(), end_at: window.endAt.toISOString() })),
           },
         },
@@ -137,6 +148,75 @@ export async function POST(request: NextRequest, context: Context) {
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+async function bestWindowsForOptions(
+  pollId: bigint,
+  optionIds: bigint[],
+  selectedOptions: { optionId: bigint; startAt: Date | null; endAt: Date | null }[],
+) {
+  const rows = await prisma.$queryRaw<ResponseRow[]>`
+    select option_id, start_at, end_at
+    from availability_responses
+    where poll_id = ${pollId}
+      and option_id in (${Prisma.join(optionIds)})
+    order by option_id asc, start_at asc
+  `;
+  const recommendations = recommendationsFromResponses(rows);
+
+  return selectedOptions.map((option) => {
+    const recommended = recommendations.find((item) => item.optionId === option.optionId.toString());
+    return {
+      startAt: recommended?.startAt ?? option.startAt!,
+      endAt: recommended?.endAt ?? option.endAt!,
+    };
+  });
+}
+
+function recommendationsFromResponses(rows: ResponseRow[]) {
+  const byOption = new Map<string, ResponseRow[]>();
+  for (const row of rows) {
+    const key = row.option_id.toString();
+    byOption.set(key, [...(byOption.get(key) ?? []), row]);
+  }
+
+  const recommendations: {
+    optionId: string;
+    startAt: Date;
+    endAt: Date;
+    availableCount: number;
+    durationMs: number;
+  }[] = [];
+
+  for (const [optionId, optionRows] of byOption) {
+    const events = optionRows.flatMap((row) => [
+      { at: row.start_at.getTime(), delta: 1 },
+      { at: row.end_at.getTime(), delta: -1 },
+    ]).sort((a, b) => a.at - b.at || b.delta - a.delta);
+
+    let active = 0;
+    for (let index = 0; index < events.length - 1; index += 1) {
+      active += events[index].delta;
+      const start = events[index].at;
+      const end = events[index + 1].at;
+      if (active > 0 && end > start) {
+        recommendations.push({
+          optionId,
+          startAt: new Date(start),
+          endAt: new Date(end),
+          availableCount: active,
+          durationMs: end - start,
+        });
+      }
+    }
+  }
+
+  return recommendations.sort((a, b) =>
+    a.optionId.localeCompare(b.optionId) ||
+    b.availableCount - a.availableCount ||
+    b.durationMs - a.durationMs ||
+    a.startAt.getTime() - b.startAt.getTime(),
+  );
 }
 
 function parseWindows(value: unknown) {

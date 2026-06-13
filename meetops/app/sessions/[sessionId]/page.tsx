@@ -4,6 +4,7 @@ import { SessionSetupWizard } from "@/components/sessions/SessionSetupWizard";
 import {
   ApiRequestError,
   getGroupDetail,
+  getCurrentUser,
   getSessionDetail,
   getSessionPolls,
 } from "@/lib/web-api";
@@ -14,11 +15,11 @@ export default async function SessionDetailPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
-  const { session, polls, group } = await getSessionData(sessionId);
+  const { session, polls, group, currentUser } = await getSessionData(sessionId);
 
   return (
     <AuthenticatedPage>
-      <SessionSetupWizard session={session} polls={polls} group={group} />
+      <SessionSetupWizard session={session} polls={polls} group={group} viewerTimezone={currentUser.timezone} />
     </AuthenticatedPage>
   );
 }
@@ -26,11 +27,12 @@ export default async function SessionDetailPage({
 async function getSessionData(sessionId: string) {
   try {
     const session = await getSessionDetail(sessionId);
-    const [polls, group] = await Promise.all([
+    const [polls, group, currentUser] = await Promise.all([
       getSessionPolls(sessionId),
       getGroupDetail(session.groupId),
+      getCurrentUser(),
     ]);
-    return { session, polls, group };
+    return { session, polls, group, currentUser };
   } catch (error) {
     if (
       error instanceof ApiRequestError &&

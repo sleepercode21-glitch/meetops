@@ -39,12 +39,14 @@ export function SessionWorkflowStepper({
   polls,
   canManage,
   nextAction,
+  viewerTimezone,
   controls,
 }: {
   session: Session;
   polls: Poll[];
   canManage: boolean;
   nextAction?: WorkflowAction;
+  viewerTimezone?: string;
   controls?: React.ReactNode;
 }) {
   const currentStep = currentWorkflowStep(session, polls);
@@ -104,6 +106,7 @@ export function SessionWorkflowStepper({
           currentStep={currentStep}
           canManage={canManage}
           nextAction={nextAction}
+          viewerTimezone={viewerTimezone}
         />
       </div>
     </Card>
@@ -117,6 +120,7 @@ function SelectedStepPanel({
   currentStep,
   canManage,
   nextAction,
+  viewerTimezone,
 }: {
   session: Session;
   polls: Poll[];
@@ -124,6 +128,7 @@ function SelectedStepPanel({
   currentStep: WorkflowStep;
   canManage: boolean;
   nextAction?: WorkflowAction;
+  viewerTimezone?: string;
 }) {
   if (step === "draft") {
     return <DraftReview session={session} polls={polls} canManage={canManage} nextAction={step === currentStep ? nextAction : undefined} />;
@@ -159,7 +164,7 @@ function SelectedStepPanel({
     const showStepActions = canManage && selectedPoll.status === "closed" && step !== "availability";
     return (
       <div className="space-y-4">
-        <PollWorkflowCard poll={selectedPoll} canManage={canManage && isCurrent} />
+        <PollWorkflowCard poll={selectedPoll} canManage={canManage && isCurrent} hostTimezone={session.hostTimezone} viewerTimezone={viewerTimezone} />
         {showStepActions ? (
           <StepActionCard
             sessionId={session.id}
@@ -169,7 +174,7 @@ function SelectedStepPanel({
           />
         ) : null}
         {previousPolls.length ? (
-          <PreviousPolls polls={previousPolls} canManage={canManage} />
+          <PreviousPolls polls={previousPolls} canManage={canManage} hostTimezone={session.hostTimezone} viewerTimezone={viewerTimezone} />
         ) : null}
       </div>
     );
@@ -497,7 +502,17 @@ function skipActionsForStep(sessionId: string, step: WorkflowStep): StepLinkActi
   return [];
 }
 
-function PreviousPolls({ polls, canManage }: { polls: Poll[]; canManage: boolean }) {
+function PreviousPolls({
+  polls,
+  canManage,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  polls: Poll[];
+  canManage: boolean;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+}) {
   return (
     <details className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
       <summary className="cursor-pointer text-sm font-semibold text-zinc-700">
@@ -505,7 +520,13 @@ function PreviousPolls({ polls, canManage }: { polls: Poll[]; canManage: boolean
       </summary>
       <div className="mt-3 space-y-3">
         {polls.map((poll) => (
-          <PollWorkflowCard key={poll.id} poll={poll} canManage={canManage && poll.status === "closed"} />
+          <PollWorkflowCard
+            key={poll.id}
+            poll={poll}
+            canManage={canManage && poll.status === "closed"}
+            hostTimezone={hostTimezone}
+            viewerTimezone={viewerTimezone}
+          />
         ))}
       </div>
     </details>

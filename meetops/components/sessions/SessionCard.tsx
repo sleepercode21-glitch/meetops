@@ -40,7 +40,6 @@ export function SessionCard({ session }: { session: Session }) {
         <TimeDisplay
           start={session.scheduledStartTime}
           end={session.scheduledEndTime}
-          timezone="America/Phoenix"
         />
       </div>
       <div className="mt-auto flex flex-wrap gap-2 pt-5">

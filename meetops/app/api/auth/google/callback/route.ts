@@ -5,6 +5,7 @@ import {
   getGoogleRedirectUri,
   isPlaceholder,
   OAUTH_STATE_COOKIE_NAME,
+  OAUTH_TIMEZONE_COOKIE_NAME,
   safeRedirectUrl,
   SESSION_COOKIE_NAME,
   sessionCookieOptions,
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
     const code = request.nextUrl.searchParams.get("code");
     const state = request.nextUrl.searchParams.get("state");
     const storedState = request.cookies.get(OAUTH_STATE_COOKIE_NAME)?.value;
+    const timezone = request.cookies.get(OAUTH_TIMEZONE_COOKIE_NAME)?.value;
 
     if (!code || !state) {
       throw new Error("Google OAuth callback is missing required state.");
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
       redirectUri: getGoogleRedirectUri(),
     });
     const profile = await fetchGoogleProfile(tokens.access_token);
-    const user = await upsertGoogleUserAndOAuthAccount({ profile, tokens });
+    const user = await upsertGoogleUserAndOAuthAccount({ profile, tokens, timezone });
 
     const response = NextResponse.redirect(safeRedirectUrl(redirectTo, origin));
     response.cookies.set(
@@ -56,6 +58,7 @@ export async function GET(request: NextRequest) {
       sessionCookieOptions(),
     );
     response.cookies.delete(OAUTH_STATE_COOKIE_NAME);
+    response.cookies.delete(OAUTH_TIMEZONE_COOKIE_NAME);
 
     return response;
   } catch (error) {
@@ -64,6 +67,7 @@ export async function GET(request: NextRequest) {
       new URL("/auth/callback?error=google_sign_in_failed", origin),
     );
     response.cookies.delete(OAUTH_STATE_COOKIE_NAME);
+    response.cookies.delete(OAUTH_TIMEZONE_COOKIE_NAME);
     return response;
   }
 }

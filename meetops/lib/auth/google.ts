@@ -73,13 +73,16 @@ export async function fetchGoogleProfile(accessToken: string) {
 export async function upsertGoogleUserAndOAuthAccount({
   profile,
   tokens,
+  timezone,
 }: {
   profile: GoogleProfile;
   tokens: GoogleTokenResponse;
+  timezone?: string;
 }) {
   const expiresAt = tokens.expires_in
     ? new Date(Date.now() + tokens.expires_in * 1000)
     : null;
+  const initialTimezone = validTimezone(timezone) ?? "America/Phoenix";
 
   const user = await prisma.user.upsert({
     where: { email: profile.email },
@@ -88,7 +91,7 @@ export async function upsertGoogleUserAndOAuthAccount({
       firstname: profile.given_name,
       lastname: profile.family_name,
       profilePhoto: profile.picture,
-      timezone: "America/Phoenix",
+      timezone: initialTimezone,
     },
     update: {
       firstname: profile.given_name,
@@ -125,4 +128,14 @@ export async function upsertGoogleUserAndOAuthAccount({
   });
 
   return user;
+}
+
+function validTimezone(value: string | undefined) {
+  if (!value) return null;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: value });
+    return value;
+  } catch {
+    return null;
+  }
 }

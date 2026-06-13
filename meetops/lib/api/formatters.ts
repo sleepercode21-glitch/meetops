@@ -74,7 +74,7 @@ export function groupSummary(
   };
 }
 
-type SessionUser = Pick<User, "userId" | "email" | "firstname" | "lastname">;
+type SessionUser = Pick<User, "userId" | "email" | "firstname" | "lastname" | "timezone">;
 
 export function sessionHost(user: SessionUser) {
   return {
@@ -82,6 +82,7 @@ export function sessionHost(user: SessionUser) {
     email: user.email,
     firstname: user.firstname,
     lastname: user.lastname,
+    timezone: user.timezone,
   };
 }
 

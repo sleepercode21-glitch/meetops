@@ -90,6 +90,7 @@ export type Session = {
   groupId: string;
   hostId: string;
   hostName?: string;
+  hostTimezone?: string;
   topic?: string;
   description?: string;
   status: SessionStatus;

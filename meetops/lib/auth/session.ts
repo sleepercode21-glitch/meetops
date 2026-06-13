@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api/errors";
 
 export const SESSION_COOKIE_NAME = "meetops_session";
 export const OAUTH_STATE_COOKIE_NAME = "meetops_oauth_state";
+export const OAUTH_TIMEZONE_COOKIE_NAME = "meetops_oauth_timezone";
 
 type SessionPayload = {
   userId: string;
