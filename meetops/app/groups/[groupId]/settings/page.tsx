@@ -33,6 +33,7 @@ export default async function GroupSettingsPage({
         <div className="flex gap-2 border-b border-zinc-200 text-sm">
           <ButtonLink href={`/groups/${groupId}`} tone="ghost" className="rounded-b-none border-transparent border-x-0 border-t-0 px-2.5">Sessions</ButtonLink>
           <ButtonLink href={`/groups/${groupId}/members`} tone="ghost" className="rounded-b-none border-transparent border-x-0 border-t-0 px-2.5">Members</ButtonLink>
+          <ButtonLink href={`/groups/${groupId}/history`} tone="ghost" className="rounded-b-none border-transparent border-x-0 border-t-0 px-2.5">History</ButtonLink>
           <ButtonLink href={`/groups/${groupId}/settings`} tone="ghost" className="rounded-b-none border-zinc-950 border-x-0 border-t-0 px-2.5 text-zinc-950">Settings</ButtonLink>
         </div>
         <SettingsCard title="Group profile">

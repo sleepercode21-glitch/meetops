@@ -1,5 +1,3 @@
-import { ButtonLink } from "@/components/common/Buttons";
-
 export default async function LoginPage({
   searchParams,
 }: {
@@ -24,13 +22,12 @@ export default async function LoginPage({
             Google sign in did not finish. Please try again.
           </div>
         ) : null}
-        <ButtonLink
+        <a
           href="/api/auth/google/start"
-          tone="primary"
-          className="mt-5 w-full"
+          className="mt-5 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-teal-900 bg-teal-900 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-teal-800"
         >
           Continue with Google
-        </ButtonLink>
+        </a>
         <p className="mt-3 text-xs leading-5 text-zinc-500">
           Uses Google Calendar and Meet for scheduling.
         </p>

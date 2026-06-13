@@ -167,6 +167,33 @@ export type ApiAuditLog = {
   created_at: string;
 };
 
+export type ApiGroupHistorySession = {
+  session_id: number;
+  topic: string | null;
+  description: string | null;
+  status: Session["status"];
+  host_name: string;
+  scheduled_start_time: string | null;
+  created_at: string;
+  polls: {
+    poll_id: number;
+    type: Poll["type"];
+    status: Poll["status"];
+    created_at: string;
+    closed_at: string | null;
+  }[];
+  comment_count: number;
+  timeline: {
+    kind: "session" | "poll" | "comment" | "event";
+    id: string;
+    poll_id?: number | null;
+    poll_type?: Poll["type"];
+    at: string;
+    title: string;
+    body: string | null;
+  }[];
+};
+
 export type ApiSessionDetail = ApiSessionSummary & {
   calendar_event_id: string | null;
   google_calendar_id: string;
@@ -310,6 +337,13 @@ export async function getGroupAuditLogs(groupId: string) {
     `/api/v1/groups/${groupId}/audit-logs?limit=100&offset=0`,
   );
   return { logs: data, page };
+}
+
+export async function getGroupHistory(groupId: string) {
+  const { data } = await apiGet<ApiGroupHistorySession[]>(
+    `/api/v1/groups/${groupId}/history`,
+  );
+  return data;
 }
 
 export function toUser(me: ApiMe, google: ApiGoogleStatus): User {
