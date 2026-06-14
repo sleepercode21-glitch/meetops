@@ -94,11 +94,13 @@ export function SessionComments({
       <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-zinc-950">Session chat</h2>
-          <p className="mt-0.5 text-xs text-zinc-500">Live comments from the group.</p>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            {disabled ? "Comments are read-only for this closed session." : "Live comments from the group."}
+          </p>
         </div>
-        <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          Live
+        <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium ${disabled ? "border-zinc-200 bg-zinc-50 text-zinc-500" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${disabled ? "bg-zinc-400" : "bg-emerald-500"}`} />
+          {disabled ? "Closed" : "Live"}
         </span>
       </div>
 

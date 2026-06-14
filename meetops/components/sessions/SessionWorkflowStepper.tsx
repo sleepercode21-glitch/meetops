@@ -58,6 +58,31 @@ export function SessionWorkflowStepper({
   const currentIndex = workflowSteps.findIndex((step) => step.id === currentStep);
   const selectedIndex = workflowSteps.findIndex((step) => step.id === selectedStep);
 
+  if (session.status === "cancelled" || session.status === "completed") {
+    return (
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-zinc-200 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-zinc-950">Flow</h2>
+              <p className="mt-0.5 text-sm text-zinc-600">
+                {session.status === "cancelled"
+                  ? "This session was cancelled. Polls and setup actions are closed."
+                  : "This session is complete. Polls and setup actions are closed."}
+              </p>
+            </div>
+            <span className="inline-flex min-h-9 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
+              {session.status === "cancelled" ? "Cancelled" : "Completed"}
+            </span>
+          </div>
+        </div>
+        <div className="bg-zinc-50/60 p-4">
+          <ClosedSessionPanel session={session} polls={polls} viewerTimezone={viewerTimezone} />
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card className="overflow-hidden p-0">
       <div className="border-b border-zinc-200 p-4">
@@ -110,6 +135,48 @@ export function SessionWorkflowStepper({
         />
       </div>
     </Card>
+  );
+}
+
+function ClosedSessionPanel({
+  session,
+  polls,
+  viewerTimezone,
+}: {
+  session: Session;
+  polls: Poll[];
+  viewerTimezone?: string;
+}) {
+  const latestPolls = ["interest", "topic", "availability", "timing"]
+    .map((step) => preferredPollForStep(pollsForStep(polls, step as WorkflowStep)))
+    .filter((poll): poll is Poll => Boolean(poll));
+
+  return (
+    <div className="space-y-4">
+      <Card className={session.status === "cancelled" ? "border-zinc-200 bg-zinc-50" : "border-emerald-200 bg-emerald-50"}>
+        <h3 className="text-lg font-semibold text-zinc-950">
+          {session.status === "cancelled" ? "Session Cancelled" : "Session Completed"}
+        </h3>
+        <p className="mt-1 text-sm text-zinc-600">
+          {session.status === "cancelled"
+            ? "This session is no longer active. Voting and scheduling are closed."
+            : "This session has ended. The setup flow is now read-only."}
+        </p>
+        {session.status === "completed" && session.scheduledStartTime ? (
+          <p className="mt-3 text-sm font-medium text-zinc-800">
+            <TimeDisplay start={session.scheduledStartTime} end={session.scheduledEndTime} timezone={viewerTimezone} />
+          </p>
+        ) : null}
+      </Card>
+      {latestPolls.length ? (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-zinc-700">Final poll snapshots</h3>
+          {latestPolls.map((poll) => (
+            <PollWorkflowCard key={poll.id} poll={poll} canManage={false} hostTimezone={session.hostTimezone} viewerTimezone={viewerTimezone} />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
