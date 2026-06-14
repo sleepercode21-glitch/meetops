@@ -35,7 +35,6 @@ export function HostSessionForm({
       body: JSON.stringify({
         topic: form.get("topic"),
         description: form.get("description"),
-        calendar_invite_policy: form.get("calendar_invite_policy"),
         meeting_owner: numericOrNull(form.get("meeting_owner")),
       }),
     });
@@ -79,32 +78,9 @@ export function HostSessionForm({
           ))}
         </select>
         <span className="mt-1 block text-xs text-zinc-500">
-          This Google account creates the Calendar invite and Meet link.
+          This Google account creates the Calendar event and Meet link after the final timing vote.
         </span>
       </label>
-      <div>
-        <div className="mb-2 text-sm font-medium text-zinc-800">
-          Calendar invite policy
-        </div>
-        <div className="grid gap-3">
-          <Radio
-            value="all_members"
-            title="Invite all group members"
-            description="Everyone in the group gets the Calendar invite."
-          />
-          <Radio
-            value="interested_members"
-            title="Invite interested members only"
-            description="Only members who show interest or vote attending are invited."
-            defaultChecked
-          />
-          <Radio
-            value="app_only"
-            title="App link only"
-            description="No Calendar invites. Members open the Meet link in the app."
-          />
-        </div>
-      </div>
       {error ? <p className="text-sm text-rose-700">{error}</p> : null}
       <Button tone="primary" type="submit" disabled={pending}>
         {pending ? "Creating..." : "Create Session"}
@@ -155,33 +131,6 @@ function TextArea({
         rows={4}
         className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
       />
-    </label>
-  );
-}
-
-function Radio({
-  title,
-  value,
-  description,
-  defaultChecked = false,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  defaultChecked?: boolean;
-}) {
-  return (
-    <label className="flex gap-3 rounded-md border border-zinc-200 p-3">
-      <input
-        type="radio"
-        name="calendar_invite_policy"
-        value={value}
-        defaultChecked={defaultChecked}
-      />
-      <span>
-        <span className="block text-sm font-medium">{title}</span>
-        <span className="text-sm text-zinc-600">{description}</span>
-      </span>
     </label>
   );
 }

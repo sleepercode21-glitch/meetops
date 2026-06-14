@@ -13,7 +13,7 @@ export async function POST(request: NextRequest, context: Context) {
     const { sessionId: id } = await context.params;
     const sessionId = parseBigIntParam(id, "sessionId");
     const { session } = await requireHostOrAdmin(user.userId, sessionId);
-    if (!["needs_host_decision", "draft", "polling", "rescheduling", "scheduling_failed"].includes(session.status)) {
+    if (!["draft", "interest_check", "topic_selection", "availability_collection", "polling", "needs_host_decision", "rescheduling", "scheduling_failed"].includes(session.status)) {
       throw new ApiError("INVALID_SESSION_STATUS", "This session cannot be manually scheduled.");
     }
     const body = (await request.json()) as { selected_option_id?: unknown; start_at?: unknown; end_at?: unknown; label?: unknown };

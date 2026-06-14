@@ -4,21 +4,32 @@ import { SessionActions } from "@/components/sessions/SessionActions";
 import { SessionComments } from "@/components/sessions/SessionComments";
 import { SessionWorkflowStepper, type WorkflowAction } from "@/components/sessions/SessionWorkflowStepper";
 import type { ApiGroupDetail } from "@/lib/web-api";
-import type { Poll, Session, SessionStatus } from "@/types/domain";
+import type { Poll, Session, SessionStatus, User } from "@/types/domain";
+
+export type SessionManagementRole = "admin" | "host";
 
 export function SessionSetupWizard({
   session,
   polls,
   group,
+  currentUser,
   viewerTimezone,
 }: {
   session: Session;
   polls: Poll[];
   group: ApiGroupDetail;
+  currentUser: User;
   viewerTimezone?: string;
 }) {
   const canManage = Boolean(session.currentUserCanManage);
   const canManageFlow = canManage && !terminalStatus(session.status);
+  const managementRole: SessionManagementRole | undefined = canManage
+    ? group.current_user_membership.is_admin
+      ? "admin"
+      : session.hostId === currentUser.id
+        ? "host"
+        : "admin"
+    : undefined;
   const nextAction = nextHostAction(session, polls);
   const liveEnabled = shouldRefresh(session, polls);
 
@@ -43,21 +54,22 @@ export function SessionSetupWizard({
         ) : null}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
         <SessionWorkflowStepper
           session={session}
           polls={polls}
           canManage={canManageFlow}
+          managementRole={managementRole}
           nextAction={nextAction}
           viewerTimezone={viewerTimezone}
           controls={
             canManage && !terminalStatus(session.status) ? (
-              <SessionActions session={session} canManage={canManage} />
+              <SessionActions session={session} canManage={canManage} managementRole={managementRole} />
             ) : null
           }
         />
 
-        <aside className="space-y-4 lg:sticky lg:top-20">
+        <aside className="space-y-4 xl:sticky xl:top-20">
           <SessionComments
             sessionId={session.id}
             disabled={session.status === "cancelled" || session.status === "completed"}

@@ -4,7 +4,7 @@ import { Card, SectionTitle } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { TimeDisplay } from "@/components/common/TimeDisplay";
 import { ManualScheduleForm } from "@/components/sessions/ManualScheduleForm";
-import { ApiRequestError, getSessionDetail, getSessionPolls } from "@/lib/web-api";
+import { ApiRequestError, getCurrentUser, getSessionDetail, getSessionPolls } from "@/lib/web-api";
 
 export default async function ReschedulePage({
   params,
@@ -12,7 +12,7 @@ export default async function ReschedulePage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
-  const { session, finalOptions } = await getData(sessionId);
+  const { session, finalOptions, currentUser } = await getData(sessionId);
 
   return (
     <AuthenticatedPage>
@@ -29,8 +29,13 @@ export default async function ReschedulePage({
           </p>
         </Card>
         <Card>
-          <SectionTitle title="Schedule manually" subtitle="Pick a final timing option or enter a time." />
-          <ManualScheduleForm sessionId={sessionId} options={finalOptions} />
+          <SectionTitle title="Schedule directly" subtitle="Pick a final timing option or enter the exact session time." />
+          <ManualScheduleForm
+            sessionId={sessionId}
+            options={finalOptions}
+            hostTimezone={session.hostTimezone}
+            viewerTimezone={currentUser.timezone}
+          />
         </Card>
       </div>
     </AuthenticatedPage>
@@ -39,15 +44,16 @@ export default async function ReschedulePage({
 
 async function getData(sessionId: string) {
   try {
-    const [session, polls] = await Promise.all([
+    const [session, polls, currentUser] = await Promise.all([
       getSessionDetail(sessionId),
       getSessionPolls(sessionId),
+      getCurrentUser(),
     ]);
     const finalOptions = polls
       .filter((poll) => poll.type === "final_timing")
       .flatMap((poll) => poll.options)
       .filter((option) => option.startAt && option.endAt);
-    return { session, finalOptions };
+    return { session, finalOptions, currentUser };
   } catch (error) {
     if (
       error instanceof ApiRequestError &&

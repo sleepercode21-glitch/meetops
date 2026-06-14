@@ -4,6 +4,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "TechUp Sessions",
   description: "Community session coordination dashboard",
+  icons: {
+    icon: "/techup.png",
+    shortcut: "/techup.png",
+    apple: "/techup.png",
+  },
 };
 
 export default function RootLayout({

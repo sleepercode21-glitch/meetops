@@ -1,12 +1,17 @@
 import { NextRequest } from "next/server";
-import { Prisma } from "@prisma/client";
+import { CalendarInvitePolicy, Prisma } from "@prisma/client";
 import { ApiError, dataResponse, errorResponse } from "@/lib/api/errors";
 import { requirePollManager } from "@/lib/api/guards";
-import { parseBigIntParam, requiredDate } from "@/lib/api/validation";
+import { optionalEnum, parseBigIntParam, requiredDate } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 
 type Context = { params: Promise<{ pollId: string }> };
+const calendarInvitePolicies = [
+  "all_members",
+  "interested_members",
+  "app_only",
+] as const satisfies readonly CalendarInvitePolicy[];
 
 type ResponseRow = {
   option_id: bigint;
@@ -28,7 +33,7 @@ export async function POST(request: NextRequest, context: Context) {
       );
     }
 
-    const body = (await request.json()) as { option_ids?: unknown; windows?: unknown; deadline?: unknown };
+    const body = (await request.json()) as { option_ids?: unknown; windows?: unknown; deadline?: unknown; calendar_invite_policy?: unknown };
     const optionIds = Array.isArray(body.option_ids) ? [...new Set(body.option_ids.map((value) => {
       if (typeof value !== "number" || !Number.isInteger(value)) {
         throw new ApiError("VALIDATION_ERROR", "option_ids must contain numeric IDs.");
@@ -44,6 +49,11 @@ export async function POST(request: NextRequest, context: Context) {
     if (deadline <= new Date()) {
       throw new ApiError("VALIDATION_ERROR", "deadline must be in the future.");
     }
+    const calendarInvitePolicy = optionalEnum(
+      body.calendar_invite_policy,
+      "calendar_invite_policy",
+      calendarInvitePolicies,
+    ) ?? "all_members";
 
     const selectedOptions = optionIds.length ? poll.options
       .filter((option) => optionIds.some((optionId) => optionId === option.optionId))
@@ -104,7 +114,7 @@ export async function POST(request: NextRequest, context: Context) {
 
       await tx.session.update({
         where: { sessionId: poll.sessionId },
-        data: { status: "polling" },
+        data: { status: "polling", calendarInvitePolicy },
       });
       await tx.auditLog.create({
         data: {
@@ -115,6 +125,7 @@ export async function POST(request: NextRequest, context: Context) {
           action: "poll_created",
           metadata: {
             poll_type: "final_timing",
+            calendar_invite_policy: calendarInvitePolicy,
             source: "availability_results",
             source_poll_id: Number(pollId),
             source_option_ids: optionIds.map(Number),

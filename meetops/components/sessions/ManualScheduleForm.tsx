@@ -1,18 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ButtonLink } from "@/components/common/Buttons";
+import { formatDateRange } from "@/lib/date-time";
 import type { PollOption } from "@/types/domain";
 
 export function ManualScheduleForm({
   sessionId,
   options,
+  hostTimezone,
+  viewerTimezone,
 }: {
   sessionId: string;
   options: PollOption[];
+  hostTimezone?: string;
+  viewerTimezone?: string;
 }) {
   const router = useRouter();
+  const displayTimezone = useViewerTimezone(viewerTimezone);
+  const sourceTimezone = hostTimezone || displayTimezone;
   const [selectedOptionId, setSelectedOptionId] = useState(options[0]?.id ?? "");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
@@ -56,27 +63,27 @@ export function ManualScheduleForm({
       {options.length ? (
         <div className="space-y-2">
           {options.map((option) => (
-            <label key={option.id} className="block rounded-md border border-zinc-200 p-3 text-sm">
+            <label key={option.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3 text-sm transition hover:border-zinc-300">
               <input
                 type="radio"
                 name="selected_option"
                 value={option.id}
                 checked={selectedOptionId === option.id}
                 onChange={() => setSelectedOptionId(option.id)}
-                className="mr-2"
+                className="mt-1"
               />
-              {option.label}
+              <OptionTimeLabel option={option} hostTimezone={sourceTimezone} viewerTimezone={displayTimezone} />
             </label>
           ))}
-          <label className="block rounded-md border border-zinc-200 p-3 text-sm">
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3 text-sm transition hover:border-zinc-300">
             <input
               type="radio"
               name="selected_option"
               checked={!selectedOptionId}
               onChange={() => setSelectedOptionId("")}
-              className="mr-2"
+              className="mt-1"
             />
-            Choose a custom time
+            <span className="font-medium text-zinc-950">Choose a custom time</span>
           </label>
         </div>
       ) : null}
@@ -97,9 +104,41 @@ export function ManualScheduleForm({
         <Button tone="primary" disabled={pending} onClick={submit}>
           {pending ? "Scheduling..." : selectedOptionId ? "Schedule This Time" : "Schedule Custom Time"}
         </Button>
-        <ButtonLink href={`/sessions/${sessionId}/polls/new`}>Run Another Timing Poll</ButtonLink>
+        <ButtonLink href={`/sessions/${sessionId}/polls/new?type=final_timing`}>Run Another Timing Poll</ButtonLink>
       </div>
     </div>
+  );
+}
+
+function OptionTimeLabel({
+  option,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  option: PollOption;
+  hostTimezone: string;
+  viewerTimezone: string;
+}) {
+  if (!option.startAt) {
+    return <span className="font-medium text-zinc-950">{option.label}</span>;
+  }
+
+  const hostText = formatDateRange(option.startAt, option.endAt, hostTimezone);
+  const viewerText = formatDateRange(option.startAt, option.endAt, viewerTimezone);
+  const sameZone = hostTimezone === viewerTimezone;
+  return (
+    <span className="min-w-0">
+      <span className="block font-medium text-zinc-950">{hostText}</span>
+      <span className="mt-1 block text-xs text-zinc-500">Host time · {zoneLabel(hostTimezone)}</span>
+      {!sameZone ? (
+        <span className="mt-1 block text-sm font-medium text-teal-800">
+          Your time · {viewerText} ({zoneLabel(viewerTimezone)})
+        </span>
+      ) : null}
+      {option.label && !isGeneratedTimeLabel(option.label) ? (
+        <span className="mt-1 block text-xs text-zinc-500">{option.label}</span>
+      ) : null}
+    </span>
   );
 }
 
@@ -108,4 +147,21 @@ function toLocalDateTime(value?: string) {
   const date = new Date(value);
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function useViewerTimezone(savedTimezone?: string) {
+  return useSyncExternalStore(
+    () => () => undefined,
+    () => savedTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    () => savedTimezone || "UTC",
+  );
+}
+
+function zoneLabel(timeZone: string) {
+  if (timeZone === "America/Phoenix") return "Arizona time";
+  return timeZone.replaceAll("_", " ");
+}
+
+function isGeneratedTimeLabel(label: string) {
+  return /^\d{4}-\d{2}-\d{2}T.* - \d{4}-\d{2}-\d{2}T/.test(label);
 }

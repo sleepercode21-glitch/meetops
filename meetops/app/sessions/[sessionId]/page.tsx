@@ -19,7 +19,7 @@ export default async function SessionDetailPage({
 
   return (
     <AuthenticatedPage>
-      <SessionSetupWizard session={session} polls={polls} group={group} viewerTimezone={currentUser.timezone} />
+      <SessionSetupWizard session={session} polls={polls} group={group} currentUser={currentUser} viewerTimezone={currentUser.timezone} />
     </AuthenticatedPage>
   );
 }

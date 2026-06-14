@@ -91,7 +91,7 @@ export function SessionComments({
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3.5">
         <div>
           <h2 className="text-sm font-semibold text-zinc-950">Session chat</h2>
           <p className="mt-0.5 text-xs text-zinc-500">
@@ -104,7 +104,7 @@ export function SessionComments({
         </span>
       </div>
 
-      <div ref={listRef} className="mx-3 mt-3 h-72 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+      <div ref={listRef} className="mx-3 mt-3 h-64 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50/80 p-3">
         {comments.length ? (
           comments.map((comment) => (
             <MessageRow key={comment.comment_id} comment={comment} />
@@ -117,16 +117,16 @@ export function SessionComments({
       </div>
 
       {!disabled ? (
-        <form onSubmit={submit} className="flex gap-2 p-3">
+        <form onSubmit={submit} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 p-3">
           <input
             value={body}
             onChange={(event) => setBody(event.target.value)}
             maxLength={1000}
             placeholder="Message the session"
-            className="min-h-10 min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-4 text-sm outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+            className="min-h-10 min-w-0 rounded-full border border-zinc-300 bg-white px-4 text-sm outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
             disabled={pending}
           />
-          <Button type="submit" tone="primary" disabled={pending} className="shrink-0 rounded-full px-4">
+          <Button type="submit" tone="primary" disabled={pending} className="shrink-0 rounded-full px-5">
             {pending ? "..." : "Send"}
           </Button>
         </form>

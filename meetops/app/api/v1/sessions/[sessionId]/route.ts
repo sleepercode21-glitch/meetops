@@ -103,6 +103,31 @@ export async function PATCH(request: NextRequest, context: Context) {
   }
 }
 
+export async function DELETE(request: NextRequest, context: Context) {
+  try {
+    const user = await requireAuth(request);
+    const { sessionId: sessionIdParam } = await context.params;
+    const sessionId = parseBigIntParam(sessionIdParam, "sessionId");
+    const { session } = await requireHostOrAdmin(user.userId, sessionId);
+
+    if (session.status !== "draft") {
+      throw new ApiError(
+        "INVALID_SESSION_STATUS",
+        "Only draft sessions can be deleted. Cancel this session instead.",
+      );
+    }
+
+    await prisma.session.delete({ where: { sessionId } });
+    return dataResponse({
+      deleted: true,
+      session_id: Number(sessionId),
+      group_id: Number(session.groupId),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
 async function validMeetingOwnerId(groupId: bigint, value: unknown) {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "number" || !Number.isInteger(value)) {

@@ -7,7 +7,7 @@ import { Button, ButtonLink } from "@/components/common/Buttons";
 import { Card } from "@/components/common/Card";
 import { ConfirmButton } from "@/components/common/ConfirmAction";
 import { pollTypeLabels } from "@/lib/labels";
-import type { Poll, PollOption } from "@/types/domain";
+import type { CalendarInvitePolicy, Poll, PollOption } from "@/types/domain";
 
 export function PollWorkflowCard({
   poll,
@@ -779,6 +779,7 @@ function CreateFinalTimingFromAvailabilityCard({
   const [selected, setSelected] = useState<string[]>([]);
   const displayTimezone = useViewerTimezone(viewerTimezone);
   const [deadline, setDeadline] = useState(() => toDateTimeInputInZone(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), displayTimezone));
+  const [calendarInvitePolicy, setCalendarInvitePolicy] = useState<CalendarInvitePolicy>("all_members");
   const [minDeadline] = useState(() => toDateTimeInputInZone(new Date(Date.now() + 60_000).toISOString(), displayTimezone));
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -823,6 +824,7 @@ function CreateFinalTimingFromAvailabilityCard({
             end_at: recommendation.end_at,
           })),
         deadline: zonedInputToIso(deadline, displayTimezone),
+        calendar_invite_policy: calendarInvitePolicy,
       }),
     });
     setPending(false);
@@ -872,11 +874,66 @@ function CreateFinalTimingFromAvailabilityCard({
           className="mt-1 min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
         />
       </label>
+      <div className="mt-4 rounded-lg border border-teal-100 bg-teal-50/60 p-3">
+        <div className="text-sm font-semibold text-teal-950">Calendar invites after this vote</div>
+        <div className="mt-2 grid gap-2">
+          <FinalInvitePolicyRadio
+            value="all_members"
+            current={calendarInvitePolicy}
+            title="Invite everyone"
+            description="Use this if interest was skipped or everyone should get the event."
+            onChange={setCalendarInvitePolicy}
+          />
+          <FinalInvitePolicyRadio
+            value="interested_members"
+            current={calendarInvitePolicy}
+            title="Invite interested members"
+            description="Use this only if an interest check decided who is attending."
+            onChange={setCalendarInvitePolicy}
+          />
+          <FinalInvitePolicyRadio
+            value="app_only"
+            current={calendarInvitePolicy}
+            title="App link only"
+            description="Create the Meet link without sending Calendar invites."
+            onChange={setCalendarInvitePolicy}
+          />
+        </div>
+      </div>
       <Button type="button" tone="primary" className="mt-4 w-full sm:w-auto" disabled={pending || !recommendations.length} onClick={createFinalTimingPoll}>
         {pending ? "Creating..." : "Create poll"}
       </Button>
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
     </Card>
+  );
+}
+
+function FinalInvitePolicyRadio({
+  value,
+  current,
+  title,
+  description,
+  onChange,
+}: {
+  value: CalendarInvitePolicy;
+  current: CalendarInvitePolicy;
+  title: string;
+  description: string;
+  onChange: (value: CalendarInvitePolicy) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer gap-3 rounded-md border border-teal-100 bg-white/80 p-2.5">
+      <input
+        type="radio"
+        className="mt-1"
+        checked={current === value}
+        onChange={() => onChange(value)}
+      />
+      <span>
+        <span className="block text-sm font-medium text-zinc-950">{title}</span>
+        <span className="text-xs text-zinc-600">{description}</span>
+      </span>
+    </label>
   );
 }
 
@@ -892,6 +949,18 @@ function DraftControls({
   setMessage: (value: string | null) => void;
 }) {
   const router = useRouter();
+  async function deleteDraftPoll() {
+    setPending("delete");
+    setMessage(null);
+    const response = await fetch(`/api/v1/polls/${poll.id}`, { method: "DELETE" });
+    setPending(null);
+    if (!response.ok) {
+      setMessage(await apiMessage(response, "Could not delete draft poll."));
+      return;
+    }
+    router.refresh();
+  }
+
   return (
     <div className="mt-4 flex flex-wrap gap-2">
       <ButtonLink href={`/sessions/${poll.sessionId}/polls/${poll.id}/edit`} tone="primary">
@@ -904,6 +973,19 @@ function DraftControls({
       >
         {pending === "publish" ? "Publishing..." : "Publish Poll"}
       </Button>
+      <ConfirmButton
+        tone="danger"
+        disabled={pending === "delete"}
+        onConfirm={() => void deleteDraftPoll()}
+        confirm={{
+          title: "Delete draft poll?",
+          message: "This permanently removes this poll draft and its options.",
+          confirmLabel: "Delete draft",
+          cancelLabel: "Keep draft",
+        }}
+      >
+        {pending === "delete" ? "Deleting..." : "Delete Draft"}
+      </ConfirmButton>
     </div>
   );
 }

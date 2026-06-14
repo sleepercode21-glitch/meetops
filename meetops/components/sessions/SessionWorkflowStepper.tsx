@@ -25,6 +25,8 @@ type StepLinkAction = {
   confirmMessage?: string;
 };
 
+type ManagementRole = "admin" | "host";
+
 const workflowSteps: { id: WorkflowStep; label: string; shortLabel: string }[] = [
   { id: "draft", label: "Draft", shortLabel: "Draft" },
   { id: "interest", label: "Interest", shortLabel: "Interest" },
@@ -38,6 +40,7 @@ export function SessionWorkflowStepper({
   session,
   polls,
   canManage,
+  managementRole,
   nextAction,
   viewerTimezone,
   controls,
@@ -45,6 +48,7 @@ export function SessionWorkflowStepper({
   session: Session;
   polls: Poll[];
   canManage: boolean;
+  managementRole?: ManagementRole;
   nextAction?: WorkflowAction;
   viewerTimezone?: string;
   controls?: React.ReactNode;
@@ -85,18 +89,15 @@ export function SessionWorkflowStepper({
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="border-b border-zinc-200 p-4">
-        <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
+      <div className="border-b border-zinc-200 p-4 sm:p-5">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="max-w-xl">
             <h2 className="text-base font-semibold text-zinc-950">Flow</h2>
-            <p className="mt-0.5 text-sm text-zinc-600">Interest, topic, and availability are optional. Timing is required.</p>
+            <p className="mt-0.5 text-sm text-zinc-600">{flowHelperText(managementRole)}</p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-            <span className="inline-flex min-h-9 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
-              Step {selectedIndex + 1} of {workflowSteps.length}
-            </span>
-            {controls ? <div className="min-w-44">{controls}</div> : null}
-          </div>
+          <span className="inline-flex min-h-9 w-fit shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
+            Step {selectedIndex + 1} of {workflowSteps.length}
+          </span>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             {workflowSteps.map((step, index) => {
@@ -111,7 +112,7 @@ export function SessionWorkflowStepper({
                   aria-current={selected ? "step" : undefined}
                 >
                   <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${stepCircleTone(status, selected)}`}>
-                    {status === "finish" ? <span className="size-2.5 rounded-full bg-current" /> : status === "skipped" ? "–" : index + 1}
+                    {index + 1}
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-semibold sm:text-sm">{step.shortLabel}</span>
@@ -121,9 +122,14 @@ export function SessionWorkflowStepper({
               );
             })}
         </div>
+        {controls ? (
+          <div className="mt-4 border-t border-zinc-100 pt-3">
+            {controls}
+          </div>
+        ) : null}
       </div>
 
-      <div className="bg-zinc-50/60 p-4">
+      <div className="bg-zinc-50/60 p-4 sm:p-5">
         <SelectedStepPanel
           session={session}
           polls={polls}
@@ -228,7 +234,7 @@ function SelectedStepPanel({
   }
 
   if (selectedPoll) {
-    const showStepActions = canManage && selectedPoll.status === "closed" && step !== "availability";
+    const showStepActions = canManage && (selectedPoll.status === "closed" || selectedPoll.status === "superseded");
     return (
       <div className="space-y-4">
         <PollWorkflowCard poll={selectedPoll} canManage={canManage && isCurrent} hostTimezone={session.hostTimezone} viewerTimezone={viewerTimezone} />
@@ -236,7 +242,7 @@ function SelectedStepPanel({
           <StepActionCard
             sessionId={session.id}
             step={step}
-            nextAction={isCurrent ? actionForEmptyCurrent : undefined}
+            nextAction={isCurrent && step !== "availability" ? actionForEmptyCurrent : undefined}
             rerunAction={rerunAction}
           />
         ) : null}
@@ -358,6 +364,16 @@ function workflowAction(
   };
 }
 
+function flowHelperText(managementRole?: ManagementRole) {
+  if (managementRole === "admin") {
+    return "Admin view: you can step in, edit, cancel, or recover the session flow.";
+  }
+  if (managementRole === "host") {
+    return "Host view: run the steps you need, skip optional ones, and finish with timing.";
+  }
+  return "Interest, topic, and availability are optional. Timing is required.";
+}
+
 function DraftReview({
   session,
   polls,
@@ -370,11 +386,11 @@ function DraftReview({
   nextAction?: WorkflowAction;
 }) {
   return (
-    <Card className="p-4">
+    <Card className="p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h3 className="text-lg font-semibold text-zinc-950">Draft</h3>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-600">
             {session.description || "Session details are ready to edit before the flow moves forward."}
           </p>
         </div>
@@ -385,7 +401,7 @@ function DraftReview({
         ) : null}
       </div>
       {canManage && !["cancelled", "completed"].includes(session.status) ? (
-        <div className="mt-4">
+        <div className="mt-5 border-t border-zinc-100 pt-4">
           <StepLaunchActions sessionId={session.id} step="draft" primaryAction={nextAction} polls={polls} />
         </div>
       ) : null}
@@ -410,7 +426,7 @@ function StepLaunchActions({
   const primaryHref = primaryAction?.href;
   const visibleActions = actions.filter((action) => action.href !== primaryHref);
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2.5">
       {primaryAction ? (
         <ActionLink action={primaryAction} tone="primary" className="w-full sm:w-auto" />
       ) : null}
@@ -518,7 +534,9 @@ function StepActionCard({
   nextAction?: WorkflowAction;
   rerunAction?: WorkflowAction;
 }) {
-  const skipActions = skipActionsForStep(sessionId, step).filter((action) => action.href !== nextAction?.href);
+  const skipActions = nextAction
+    ? skipActionsForStep(sessionId, step).filter((action) => action.href !== nextAction.href)
+    : [];
   if (!nextAction && !rerunAction && !skipActions.length) return null;
   return (
     <Card>

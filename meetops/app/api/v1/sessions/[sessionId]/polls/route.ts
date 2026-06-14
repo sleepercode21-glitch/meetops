@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import type { CalendarInvitePolicy } from "@prisma/client";
 import { ApiError, dataResponse, errorResponse } from "@/lib/api/errors";
 import { requireHostOrAdmin, requireSessionAccess } from "@/lib/api/guards";
 import { pollResponse, pollTypes, statusForPollType } from "@/lib/api/poll-utils";
@@ -8,6 +9,11 @@ import { closeExpiredPollsForSession } from "@/lib/poll-expiration";
 import { prisma } from "@/lib/prisma";
 
 type Context = { params: Promise<{ sessionId: string }> };
+const calendarInvitePolicies = [
+  "all_members",
+  "interested_members",
+  "app_only",
+] as const satisfies readonly CalendarInvitePolicy[];
 
 export async function GET(request: NextRequest, context: Context) {
   try {
@@ -41,13 +47,18 @@ export async function POST(request: NextRequest, context: Context) {
     if (session.status === "cancelled" || session.status === "completed") {
       throw new ApiError("INVALID_SESSION_STATUS", "Session cannot accept new polls.");
     }
-    const body = (await request.json()) as { type?: unknown; multi_choice?: unknown; deadline?: unknown };
+    const body = (await request.json()) as { type?: unknown; multi_choice?: unknown; deadline?: unknown; calendar_invite_policy?: unknown };
     const type = optionalEnum(body.type, "type", pollTypes);
     if (!type) {
       throw new ApiError("VALIDATION_ERROR", "Poll type is required.");
     }
     const multiChoice = optionalBoolean(body.multi_choice, "multi_choice") ?? type === "availability";
     const deadline = optionalDate(body.deadline, "deadline") ?? null;
+    const calendarInvitePolicy = optionalEnum(
+      body.calendar_invite_policy,
+      "calendar_invite_policy",
+      calendarInvitePolicies,
+    ) ?? (type === "final_timing" ? "all_members" : undefined);
     const poll = await prisma.$transaction(async (tx) => {
       await tx.poll.updateMany({
         where: {
@@ -60,9 +71,25 @@ export async function POST(request: NextRequest, context: Context) {
       const created = await tx.poll.create({
         data: { sessionId, createdBy: user.userId, type, multiChoice, deadline },
       });
-      await tx.session.update({ where: { sessionId }, data: { status: statusForPollType(type) } });
+      await tx.session.update({
+        where: { sessionId },
+        data: {
+          status: statusForPollType(type),
+          ...(type === "final_timing" && calendarInvitePolicy ? { calendarInvitePolicy } : {}),
+        },
+      });
       await tx.auditLog.create({
-        data: { userId: user.userId, groupId: session.groupId, sessionId, pollId: created.pollId, action: "poll_created", metadata: { poll_type: type } },
+        data: {
+          userId: user.userId,
+          groupId: session.groupId,
+          sessionId,
+          pollId: created.pollId,
+          action: "poll_created",
+          metadata: {
+            poll_type: type,
+            ...(type === "final_timing" && calendarInvitePolicy ? { calendar_invite_policy: calendarInvitePolicy } : {}),
+          },
+        },
       });
       return created;
     });

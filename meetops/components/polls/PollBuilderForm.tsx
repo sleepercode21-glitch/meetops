@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/common/Buttons";
 import { ConfirmButton } from "@/components/common/ConfirmAction";
-import type { PollType } from "@/types/domain";
+import type { CalendarInvitePolicy, PollType } from "@/types/domain";
 
 type DraftOption = {
   id?: string;
@@ -33,6 +33,7 @@ export function PollBuilderForm({
   const initialPollType = existingPoll?.type ?? defaultPollType;
   const [pollType, setPollType] = useState<PollType>(initialPollType);
   const [multiChoice, setMultiChoice] = useState(existingPoll?.multiChoice ?? initialPollType === "availability");
+  const [calendarInvitePolicy, setCalendarInvitePolicy] = useState<CalendarInvitePolicy>("all_members");
   const [deadline, setDeadline] = useState(toLocalDateTime(existingPoll?.deadline));
   const [minimumDeadline] = useState(() => toLocalDateTime(new Date(Date.now() + 60_000).toISOString()));
   const [options, setOptions] = useState<DraftOption[]>(
@@ -142,6 +143,9 @@ export function PollBuilderForm({
         const response = await fetch(`/api/v1/polls/${pollId}/publish`, { method: "POST" });
         if (!response.ok) throw new Error(await apiMessage(response, "Could not publish poll."));
       }
+      if (pollType === "final_timing") {
+        await updateSessionInvitePolicy();
+      }
       router.push(`/sessions/${sessionId}`);
       router.refresh();
     } catch (caught) {
@@ -159,6 +163,7 @@ export function PollBuilderForm({
         type: pollType,
         multi_choice: effectiveMultiChoice,
         deadline: deadline ? new Date(deadline).toISOString() : null,
+        ...(pollType === "final_timing" ? { calendar_invite_policy: calendarInvitePolicy } : {}),
       }),
     });
     if (!response.ok) throw new Error(await apiMessage(response, "Could not create poll."));
@@ -176,6 +181,15 @@ export function PollBuilderForm({
       }),
     });
     if (!response.ok) throw new Error(await apiMessage(response, "Could not update poll."));
+  }
+
+  async function updateSessionInvitePolicy() {
+    const response = await fetch(`/api/v1/sessions/${sessionId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ calendar_invite_policy: calendarInvitePolicy }),
+    });
+    if (!response.ok) throw new Error(await apiMessage(response, "Could not update invite policy."));
   }
 
   async function createOption(pollId: string, option: DraftOption, index: number) {
@@ -204,6 +218,20 @@ export function PollBuilderForm({
   async function deleteOption(optionId: string) {
     const response = await fetch(`/api/v1/poll-options/${optionId}`, { method: "DELETE" });
     if (!response.ok) throw new Error(await apiMessage(response, "Could not delete option."));
+  }
+
+  async function deleteDraftPoll() {
+    if (!existingPoll) return;
+    setPending("delete");
+    setError(null);
+    const response = await fetch(`/api/v1/polls/${existingPoll.id}`, { method: "DELETE" });
+    setPending(null);
+    if (!response.ok) {
+      setError(await apiMessage(response, "Could not delete draft poll."));
+      return;
+    }
+    router.push(`/sessions/${sessionId}`);
+    router.refresh();
   }
 
   return (
@@ -285,6 +313,13 @@ export function PollBuilderForm({
         </label>
       </section>
 
+      {pollType === "final_timing" ? (
+        <InvitePolicySection
+          value={calendarInvitePolicy}
+          onChange={setCalendarInvitePolicy}
+        />
+      ) : null}
+
       {!fixedInterest ? <section className="rounded-xl border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-sm font-semibold text-zinc-950">
@@ -355,15 +390,99 @@ export function PollBuilderForm({
         </section>
       )}
       {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button type="button" disabled={pending === "draft"} onClick={() => submit(false)}>
           {pending === "draft" ? "Saving..." : "Save Draft"}
         </Button>
         <Button type="button" tone="primary" disabled={pending === "publish"} onClick={() => submit(true)}>
           {pending === "publish" ? "Publishing..." : "Publish Poll"}
         </Button>
+        {existingPoll ? (
+          <ConfirmButton
+            tone="danger"
+            disabled={pending === "delete"}
+            onConfirm={() => void deleteDraftPoll()}
+            confirm={{
+              title: "Delete draft poll?",
+              message: "This permanently removes this poll draft and its draft options.",
+              confirmLabel: "Delete draft",
+              cancelLabel: "Keep draft",
+            }}
+          >
+            {pending === "delete" ? "Deleting..." : "Delete Draft"}
+          </ConfirmButton>
+        ) : null}
       </div>
     </form>
+  );
+}
+
+function InvitePolicySection({
+  value,
+  onChange,
+}: {
+  value: CalendarInvitePolicy;
+  onChange: (value: CalendarInvitePolicy) => void;
+}) {
+  return (
+    <section className="rounded-xl border border-teal-100 bg-teal-50/60 p-4">
+      <h2 className="text-sm font-semibold text-teal-950">Calendar invites after this vote</h2>
+      <p className="mt-1 text-sm text-teal-900">
+        The winning final timing option can schedule the Meet. Choose who should receive the Calendar invite.
+      </p>
+      <div className="mt-3 grid gap-2">
+        <PolicyRadio
+          value="all_members"
+          current={value}
+          title="Invite all group members"
+          description="Best when interest was skipped or everyone should receive the event."
+          onChange={onChange}
+        />
+        <PolicyRadio
+          value="interested_members"
+          current={value}
+          title="Invite interested members only"
+          description="Use this when you ran an interest check and only interested/attending members should get the invite."
+          onChange={onChange}
+        />
+        <PolicyRadio
+          value="app_only"
+          current={value}
+          title="App link only"
+          description="Create the Meet link, but do not send Calendar invites."
+          onChange={onChange}
+        />
+      </div>
+    </section>
+  );
+}
+
+function PolicyRadio({
+  value,
+  current,
+  title,
+  description,
+  onChange,
+}: {
+  value: CalendarInvitePolicy;
+  current: CalendarInvitePolicy;
+  title: string;
+  description: string;
+  onChange: (value: CalendarInvitePolicy) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer gap-3 rounded-lg border border-teal-100 bg-white/80 p-3">
+      <input
+        type="radio"
+        className="mt-1"
+        checked={current === value}
+        onChange={() => onChange(value)}
+      />
+      <span>
+        <span className="block text-sm font-medium text-zinc-950">{title}</span>
+        <span className="text-sm text-zinc-600">{description}</span>
+      </span>
+    </label>
   );
 }
 
