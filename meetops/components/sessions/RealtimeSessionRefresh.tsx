@@ -6,29 +6,34 @@ import { useRouter } from "next/navigation";
 
 export function RealtimeSessionRefresh({
   enabled,
-  intervalMs = 750,
+  intervalMs = 5000,
 }: {
   enabled: boolean;
   intervalMs?: number;
 }) {
   const router = useRouter();
   const lastRefreshAt = useRef(0);
+  const jitterMs = useRef(0);
 
   useEffect(() => {
     if (!enabled) return;
+    jitterMs.current = Math.floor(Math.random() * Math.min(intervalMs, 1000));
     function refreshVisible() {
       const now = Date.now();
       if (document.visibilityState !== "visible" || now - lastRefreshAt.current < intervalMs) return;
       lastRefreshAt.current = now;
       router.refresh();
     }
+    const delayedStart = window.setTimeout(() => {
+      refreshVisible();
+    }, jitterMs.current);
     const tick = window.setInterval(() => {
       refreshVisible();
-    }, intervalMs);
-    refreshVisible();
+    }, intervalMs + jitterMs.current);
     window.addEventListener("focus", refreshVisible);
     document.addEventListener("visibilitychange", refreshVisible);
     return () => {
+      window.clearTimeout(delayedStart);
       window.clearInterval(tick);
       window.removeEventListener("focus", refreshVisible);
       document.removeEventListener("visibilitychange", refreshVisible);

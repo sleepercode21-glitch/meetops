@@ -23,7 +23,7 @@ export default async function DashboardPage() {
         <PageHeader
           title="Dashboard"
           subtitle={`${groups.length} groups · ${activeSessions.length} planning · ${scheduledSessions.length} scheduled · ${needsAttention.length} need action`}
-          badge={<RealtimeSessionRefresh enabled intervalMs={3000} />}
+          badge={<RealtimeSessionRefresh enabled intervalMs={15000} />}
           primaryAction={<ButtonLink href="/groups/join" tone="primary">Join Group</ButtonLink>}
           secondaryActions={
             <>

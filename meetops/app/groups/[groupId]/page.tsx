@@ -72,7 +72,7 @@ export default async function GroupDetailPage({
             <SectionTitle
               title="Active polls"
               subtitle="Open votes and availability checks that need member input."
-              action={<RealtimeSessionRefresh enabled={liveEnabled} intervalMs={500} />}
+              action={<RealtimeSessionRefresh enabled={liveEnabled} intervalMs={10000} />}
             />
             <div className="grid auto-rows-fr gap-3">
               {activePolls.length ? activePolls.map((poll) => (

@@ -44,7 +44,7 @@ export function SessionComments({
     void load();
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
-    }, 2000);
+    }, 3000);
 
     return () => {
       cancelled = true;

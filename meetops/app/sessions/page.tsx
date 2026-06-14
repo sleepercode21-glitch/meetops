@@ -48,7 +48,7 @@ export async function SessionsList({
         <PageHeader
           title={title}
           subtitle={subtitle}
-          badge={<RealtimeSessionRefresh enabled intervalMs={3000} />}
+          badge={<RealtimeSessionRefresh enabled intervalMs={10000} />}
           primaryAction={<ButtonLink href="/groups" tone="primary">Host from Group</ButtonLink>}
         />
         <Card>

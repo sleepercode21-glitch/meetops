@@ -15,7 +15,7 @@ export default async function GroupsPage() {
         <PageHeader
           title="My Groups"
           subtitle="Pick a group to host, vote, or join a scheduled session."
-          badge={<RealtimeSessionRefresh enabled intervalMs={3000} />}
+          badge={<RealtimeSessionRefresh enabled intervalMs={15000} />}
           primaryAction={<ButtonLink href="/groups/join" tone="primary">Join Group</ButtonLink>}
           secondaryActions={<ButtonLink href="/groups/new">Create Group</ButtonLink>}
         />
