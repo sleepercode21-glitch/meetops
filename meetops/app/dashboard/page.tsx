@@ -6,10 +6,10 @@ import { EmptyState } from "@/components/common/States";
 import { GroupCard } from "@/components/groups/GroupCard";
 import { RealtimeSessionRefresh } from "@/components/sessions/RealtimeSessionRefresh";
 import { SessionCard } from "@/components/sessions/SessionCard";
-import { getGroupSessions, getGroups } from "@/lib/web-api";
+import { getCurrentUser, getGroupSessions, getGroups } from "@/lib/web-api";
 
 export default async function DashboardPage() {
-  const groups = await getGroups();
+  const [currentUser, groups] = await Promise.all([getCurrentUser(), getGroups()]);
   const sessions = (await Promise.all(groups.map((group) => getGroupSessions(group.id)))).flatMap(
     ({ sessions: groupSessions }) => groupSessions,
   );
@@ -25,8 +25,29 @@ export default async function DashboardPage() {
           subtitle={`${groups.length} groups · ${activeSessions.length} planning · ${scheduledSessions.length} scheduled · ${needsAttention.length} need action`}
           badge={<RealtimeSessionRefresh enabled intervalMs={3000} />}
           primaryAction={<ButtonLink href="/groups/join" tone="primary">Join Group</ButtonLink>}
-          secondaryActions={<ButtonLink href="/groups/new">Create Group</ButtonLink>}
+          secondaryActions={
+            <>
+              {currentUser.platformOwner ? <ButtonLink href="/platform/users">Users</ButtonLink> : null}
+              <ButtonLink href="/groups/new">Create Group</ButtonLink>
+            </>
+          }
         />
+
+        {currentUser.platformOwner ? (
+          <Card className="border-teal-100 bg-teal-50/70">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-semibold text-teal-950">Platform owner tools</h2>
+                <p className="mt-1 text-sm text-teal-900">
+                  Review every registered user, profile details, timezone, calendar connection, and activity.
+                </p>
+              </div>
+              <ButtonLink href="/platform/users" tone="primary" className="w-full sm:w-auto">
+                Open Users
+              </ButtonLink>
+            </div>
+          </Card>
+        ) : null}
 
         {needsAttention.length ? (
           <section>

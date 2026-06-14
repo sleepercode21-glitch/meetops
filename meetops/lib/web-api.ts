@@ -104,6 +104,43 @@ export type ApiMember = {
   google_updated_at?: string | null;
 };
 
+export type ApiPlatformUser = {
+  user_id: number;
+  email: string;
+  firstname: string | null;
+  lastname: string | null;
+  profile_photo: string | null;
+  timezone: string;
+  platform_owner: boolean;
+  joined_at: string;
+  updated_at: string;
+  google: {
+    connected: boolean;
+    calendar_events_scope_granted: boolean;
+    scope: string | null;
+    token_type: string | null;
+    access_token_expires_at: string | null;
+    connected_at: string | null;
+    updated_at: string | null;
+  };
+  memberships: {
+    group_id: number;
+    group_name: string;
+    is_admin: boolean;
+    joined_at: string;
+  }[];
+  counts: {
+    groups: number;
+    admin_groups: number;
+    hosted_sessions: number;
+    meeting_owner_sessions: number;
+    votes: number;
+    suggestions: number;
+    comments: number;
+    audit_events: number;
+  };
+};
+
 export type ApiSessionSummary = {
   session_id: number;
   group_id: number;
@@ -288,6 +325,13 @@ export async function getGroupMembers(groupId: string) {
     `/api/v1/groups/${groupId}/members?limit=100&offset=0&role=all`,
   );
   return { members: data, page };
+}
+
+export async function getPlatformUsers() {
+  const { data, page } = await apiList<ApiPlatformUser>(
+    "/api/v1/platform/users?limit=100&offset=0",
+  );
+  return { users: data, page };
 }
 
 export async function getGroupSessions(groupId: string) {

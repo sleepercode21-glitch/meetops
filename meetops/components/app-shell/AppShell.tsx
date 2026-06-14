@@ -21,6 +21,14 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             >
               My Groups
             </Link>
+            {currentUser.platformOwner ? (
+              <Link
+                href="/platform/users"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
+              >
+                Users
+              </Link>
+            ) : null}
             <form action="/api/auth/logout" method="post" className="hidden sm:block">
               <button
                 type="submit"
