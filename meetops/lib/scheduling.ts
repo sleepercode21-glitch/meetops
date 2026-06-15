@@ -440,14 +440,24 @@ async function refreshGoogleToken(refreshToken: string | null) {
   };
 }
 
-async function selectCalendarAttendees(session: Pick<Session, "sessionId" | "groupId" | "calendarInvitePolicy">) {
+async function selectCalendarAttendees(
+  session: Pick<Session, "sessionId" | "groupId" | "calendarInvitePolicy" | "meetingOwnerId" | "hostId">,
+) {
   if (session.calendarInvitePolicy === "app_only") return [];
   if (session.calendarInvitePolicy === "all_members") {
     const members = await prisma.member.findMany({
       where: { groupId: session.groupId },
       include: { user: true },
     });
-    return uniqueEmails(members.map((member) => member.user.email));
+    const meetingOwnerId = session.meetingOwnerId ?? session.hostId;
+    const meetingOwner = await prisma.user.findUnique({
+      where: { userId: meetingOwnerId },
+      select: { email: true },
+    });
+    return uniqueEmails([
+      ...members.map((member) => member.user.email),
+      ...(meetingOwner?.email ? [meetingOwner.email] : []),
+    ]);
   }
   return interestedMemberEmails(session.sessionId);
 }
