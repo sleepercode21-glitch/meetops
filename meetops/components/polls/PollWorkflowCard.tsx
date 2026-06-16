@@ -26,7 +26,7 @@ export function PollWorkflowCard({
   if (poll.type === "final_timing") {
     return <FinalTimingPollCard poll={poll} canManage={canManage} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />;
   }
-  return <StandardPollCard poll={poll} canManage={canManage} />;
+  return <StandardPollCard poll={poll} canManage={canManage} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />;
 }
 
 function AvailabilityPollCard({
@@ -97,7 +97,7 @@ function AvailabilityPollCard({
           </>
         ) : null}
         {poll.status === "active" ? (
-          <AvailabilityResponseForm poll={poll} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
+          <AvailabilityResponseForm poll={poll} viewerTimezone={viewerTimezone} />
         ) : (
           poll.options.map((option) => <WindowRow key={option.id} option={option} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />)
         )}
@@ -214,17 +214,14 @@ function FinalTimingPollCard({
           </>
         ) : null}
         {poll.status === "active" ? (
-          poll.options.map((option) => (
-            <FinalTimingOptionRadioRow
-              key={option.id}
-              option={option}
-              checked={selected.includes(option.id)}
-              disabled={poll.status !== "active" || pending === "vote"}
-              onSelect={() => setSelected([option.id])}
-              hostTimezone={hostTimezone}
-              viewerTimezone={viewerTimezone}
-            />
-          ))
+          <TimeSlotVoteGrid
+            options={poll.options}
+            selectedIds={selected}
+            mode="single"
+            disabled={pending === "vote"}
+            viewerTimezone={viewerTimezone}
+            onToggle={(option) => setSelected([option.id])}
+          />
         ) : (
           <RankedResults options={ranked(poll.options)} emptyText="No final timing votes yet." hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
         )}
@@ -249,7 +246,17 @@ function FinalTimingPollCard({
   );
 }
 
-function StandardPollCard({ poll, canManage }: { poll: Poll; canManage: boolean }) {
+function StandardPollCard({
+  poll,
+  canManage,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  poll: Poll;
+  canManage: boolean;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+}) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(poll.currentUserVoteIds);
   const [pending, setPending] = useState<string | null>(null);
@@ -299,7 +306,7 @@ function StandardPollCard({ poll, canManage }: { poll: Poll; canManage: boolean 
 
       <div className="mt-4 space-y-2">
         {resultOnly ? (
-          <CompactResults options={poll.options} emptyText="No votes yet." />
+          <CompactResults options={poll.options} emptyText="No votes yet." hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
         ) : (
           poll.options.map((option) => {
             const checked = selected.includes(option.id);
@@ -312,6 +319,8 @@ function StandardPollCard({ poll, canManage }: { poll: Poll; canManage: boolean 
                 disabled={poll.status !== "active" || pending === "vote"}
                 showResults={showResults}
                 totalVotes={totalVotes(poll.options)}
+                hostTimezone={hostTimezone}
+                viewerTimezone={viewerTimezone}
                 onClick={() => {
                   const next = poll.multiChoice ? toggleMulti(selected, option.id) : [option.id];
                   setSelected(next);
@@ -334,11 +343,11 @@ function FinalTimingLiveSummary({ options, hostTimezone, viewerTimezone }: { opt
   const leaders = topVoteCount > 0 ? options.filter((option) => option.voteCount === topVoteCount) : [];
   const leader = leaders[0];
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+    <div className="rounded-lg border border-teal-200 bg-teal-50 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-blue-800">Current leader</div>
-          <div className="mt-1 text-sm font-medium text-blue-950">
+          <div className="text-xs font-semibold uppercase tracking-wide text-teal-800">Current leader</div>
+          <div className="mt-1 text-sm font-medium text-teal-950">
             {leaders.length === 0
               ? "Waiting for votes"
               : leaders.length > 1
@@ -346,7 +355,7 @@ function FinalTimingLiveSummary({ options, hostTimezone, viewerTimezone }: { opt
                 : <DualTimeRange option={leader} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} compact />}
           </div>
         </div>
-        <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-800">
+        <span className="rounded-full border border-teal-200 bg-white px-2.5 py-1 text-xs font-medium text-teal-800">
           {topVoteCount} {topVoteCount === 1 ? "vote" : "votes"}
         </span>
       </div>
@@ -399,11 +408,9 @@ type AvailabilityRecommendation = {
 
 function AvailabilityResponseForm({
   poll,
-  hostTimezone,
   viewerTimezone,
 }: {
   poll: Poll;
-  hostTimezone?: string;
   viewerTimezone?: string;
 }) {
   const router = useRouter();
@@ -435,10 +442,23 @@ function AvailabilityResponseForm({
     };
   }, [displayTimezone, poll.id]);
 
-  function update(optionId: string, patch: Partial<{ startAt: string; endAt: string }>) {
-    setValues((current) => ({
-      ...current,
-      [optionId]: { ...(current[optionId] ?? { startAt: "", endAt: "" }), ...patch },
+  function toggleOption(option: PollOption) {
+    if (!loaded || pending || !option.startAt || !option.endAt) return;
+    const current = values[option.id];
+    if (current?.startAt && current?.endAt) {
+      setValues((existing) => {
+        const next = { ...existing };
+        delete next[option.id];
+        return next;
+      });
+      return;
+    }
+    setValues((existing) => ({
+      ...existing,
+      [option.id]: {
+        startAt: toDateTimeInputInZone(option.startAt, displayTimezone),
+        endAt: toDateTimeInputInZone(option.endAt, displayTimezone),
+      },
     }));
   }
 
@@ -491,56 +511,156 @@ function AvailabilityResponseForm({
     }
   }
 
+  const hasSelectedAvailability = Object.values(values).some((value) => value.startAt && value.endAt);
+
   return (
     <div className="space-y-3">
-      {poll.options.map((option) => {
-        const value = values[option.id] ?? { startAt: "", endAt: "" };
-        return (
-          <div key={option.id} className="rounded-lg border border-zinc-200 bg-white p-4">
-            <TimeOptionContent option={option} showLabel={false} hostTimezone={hostTimezone} viewerTimezone={displayTimezone} preferViewer />
-            <p className="mt-3 text-sm font-medium text-teal-800">
-              Choose any time inside the green “Your time” window above. These inputs use {zoneLabel(displayTimezone)}.
-            </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-600">I am free from (your time)</span>
-                <input
-                  type="datetime-local"
-                  min={toDateTimeInputInZone(option.startAt, displayTimezone)}
-                  max={toDateTimeInputInZone(option.endAt, displayTimezone)}
-                  value={value.startAt}
-                  disabled={!loaded || pending}
-                  className="min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
-                  onChange={(event) => update(option.id, { startAt: event.target.value })}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-600">until (your time)</span>
-                <input
-                  type="datetime-local"
-                  min={value.startAt || toDateTimeInputInZone(option.startAt, displayTimezone)}
-                  max={toDateTimeInputInZone(option.endAt, displayTimezone)}
-                  value={value.endAt}
-                  disabled={!loaded || pending}
-                  className="min-h-10 w-full rounded-md border border-zinc-300 px-3 text-sm"
-                  onChange={(event) => update(option.id, { endAt: event.target.value })}
-                />
-              </label>
-            </div>
-            <AvailabilitySelectionPreview
-              startAt={value.startAt}
-              endAt={value.endAt}
-              hostTimezone={hostTimezone}
-              viewerTimezone={displayTimezone}
-            />
-          </div>
-        );
-      })}
+      <TimeSlotVoteGrid
+        options={poll.options}
+        selectedIds={Object.entries(values).flatMap(([optionId, value]) => value.startAt && value.endAt ? [optionId] : [])}
+        mode="multiple"
+        disabled={!loaded || pending}
+        viewerTimezone={displayTimezone}
+        onToggle={toggleOption}
+      />
       <Button type="button" tone="primary" className="w-full sm:w-auto" disabled={!loaded || pending} onClick={safeSubmit}>
-        {pending ? "Saving..." : poll.currentUserVoteIds.length ? "Update Availability" : "Submit Availability"}
+        {pending ? "Saving..." : hasSelectedAvailability ? "Update Availability" : "Submit Availability"}
       </Button>
       {message ? <p className="text-sm text-zinc-700">{message}</p> : null}
     </div>
+  );
+}
+
+function TimeSlotVoteGrid({
+  options,
+  selectedIds,
+  mode,
+  disabled,
+  viewerTimezone,
+  onToggle,
+}: {
+  options: PollOption[];
+  selectedIds: string[];
+  mode: "single" | "multiple";
+  disabled: boolean;
+  viewerTimezone?: string;
+  onToggle: (option: PollOption) => void;
+}) {
+  const displayTimezone = useViewerTimezone(viewerTimezone);
+  const timeOptions = options.filter((option) => option.startAt && option.endAt);
+  const textOptions = options.filter((option) => !option.startAt || !option.endAt);
+  const dateKeys = uniqueSortedDateKeys(timeOptions.map((option) => dateKeyInZone(option.startAt!, displayTimezone)));
+  const byDate = new Map<string, Map<number, PollOption>>();
+
+  for (const option of timeOptions) {
+    const dateKey = dateKeyInZone(option.startAt!, displayTimezone);
+    const hour = hourInZone(option.startAt!, displayTimezone);
+    const dateOptions = byDate.get(dateKey) ?? new Map<number, PollOption>();
+    dateOptions.set(hour, option);
+    byDate.set(dateKey, dateOptions);
+  }
+
+  return (
+    <div className="space-y-3">
+      {dateKeys.map((dateKey) => (
+        <TimeSlotVoteBar
+          key={dateKey}
+          dateKey={dateKey}
+          optionsByHour={byDate.get(dateKey) ?? new Map()}
+          selectedIds={selectedIds}
+          mode={mode}
+          disabled={disabled}
+          onToggle={onToggle}
+        />
+      ))}
+      {textOptions.map((option) => {
+        const checked = selectedIds.includes(option.id);
+        return (
+          <button
+            key={option.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onToggle(option)}
+            className={`flex min-h-14 w-full items-center gap-3 rounded-lg border p-4 text-left transition ${
+              checked ? "border-teal-400 bg-teal-50" : "border-zinc-200 bg-white"
+            } ${disabled ? "cursor-default opacity-80" : "hover:border-teal-300 hover:bg-teal-50/60"}`}
+            aria-pressed={checked}
+          >
+            <SelectionMark selected={checked} mode={mode} />
+            <span className="font-medium text-zinc-950">{option.label}</span>
+          </button>
+        );
+      })}
+      {!timeOptions.length && !textOptions.length ? (
+        <p className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">No options yet.</p>
+      ) : null}
+      {timeOptions.length ? (
+        <p className="text-xs text-zinc-500">
+          Tap {mode === "single" ? "one time slot" : "the time slots"} that work for you. Times are shown in {zoneLabel(displayTimezone)}.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function TimeSlotVoteBar({
+  dateKey,
+  optionsByHour,
+  selectedIds,
+  mode,
+  disabled,
+  onToggle,
+}: {
+  dateKey: string;
+  optionsByHour: Map<number, PollOption>;
+  selectedIds: string[];
+  mode: "single" | "multiple";
+  disabled: boolean;
+  onToggle: (option: PollOption) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-teal-100 bg-teal-50 p-1">
+      <div className="grid grid-cols-[56px_repeat(24,minmax(0,1fr))] items-stretch">
+        <div className="flex min-h-14 flex-col items-center justify-center rounded-lg bg-teal-500 px-1 text-center text-[10px] font-bold uppercase leading-tight text-white">
+          <span>{weekdayShort(dateKey)}</span>
+          <span>{monthShort(dateKey)}</span>
+          <span className="text-base leading-none">{dayNumber(dateKey)}</span>
+        </div>
+        {Array.from({ length: 24 }, (_, hour) => {
+          const option = optionsByHour.get(hour);
+          const selected = option ? selectedIds.includes(option.id) : false;
+          const unavailable = !option;
+          return (
+            <button
+              key={`${dateKey}-${hour}`}
+              type="button"
+              disabled={disabled || unavailable}
+              onClick={() => option ? onToggle(option) : undefined}
+              className={`flex min-h-14 min-w-0 flex-col items-center justify-center border-l border-white/70 text-xs font-semibold transition ${
+                selected
+                  ? "bg-teal-600 text-white shadow-inner"
+                  : unavailable
+                    ? "bg-zinc-100 text-zinc-300"
+                    : "bg-teal-50 text-teal-800 hover:bg-teal-100"
+              } ${disabled || unavailable ? "cursor-not-allowed" : ""}`}
+              aria-pressed={selected}
+              aria-label={`${mode === "single" ? "Choose" : selected ? "Remove" : "Add"} ${formatHour(hour)} on ${dateKey}`}
+            >
+              <span className="text-sm leading-none sm:text-base">{hourLabel(hour)}</span>
+              <span className="text-[9px] leading-none">{hourMeridiem(hour)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SelectionMark({ selected, mode }: { selected: boolean; mode: "single" | "multiple" }) {
+  return (
+    <span className={`flex size-5 shrink-0 items-center justify-center ${mode === "single" ? "rounded-full" : "rounded"} border ${selected ? "border-teal-700 bg-teal-700" : "border-zinc-400 bg-white"}`}>
+      {selected ? <span className={`${mode === "single" ? "size-2 rounded-full" : "size-2.5 rounded-sm"} bg-white`} /> : null}
+    </span>
   );
 }
 
@@ -549,74 +669,6 @@ function WindowRow({ option, hostTimezone, viewerTimezone }: { option: PollOptio
     <div className="rounded-lg border border-zinc-200 bg-white p-4">
       <TimeOptionContent option={option} showLabel={false} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
     </div>
-  );
-}
-
-function AvailabilitySelectionPreview({
-  startAt,
-  endAt,
-  hostTimezone,
-  viewerTimezone,
-}: {
-  startAt: string;
-  endAt: string;
-  hostTimezone?: string;
-  viewerTimezone: string;
-}) {
-  if (!startAt || !endAt) {
-    return null;
-  }
-
-  const sourceTimezone = hostTimezone || viewerTimezone;
-  const startIso = zonedInputToIso(startAt, viewerTimezone);
-  const endIso = zonedInputToIso(endAt, viewerTimezone);
-  const viewerText = formatRangeInZone(startIso, endIso, viewerTimezone);
-  const hostText = formatRangeInZone(startIso, endIso, sourceTimezone);
-
-  return (
-    <div className="mt-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-950">
-      <div className="font-medium">Your selection: {viewerText}</div>
-      {sourceTimezone === viewerTimezone ? (
-        <div className="mt-0.5 text-xs text-teal-800">This is also the host-visible time.</div>
-      ) : (
-        <div className="mt-0.5 text-xs text-teal-800">
-          Host sees: {hostText} ({zoneLabel(sourceTimezone)})
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FinalTimingOptionRadioRow({
-  option,
-  checked,
-  disabled,
-  onSelect,
-  hostTimezone,
-  viewerTimezone,
-}: {
-  option: PollOption;
-  checked: boolean;
-  disabled: boolean;
-  onSelect: () => void;
-  hostTimezone?: string;
-  viewerTimezone?: string;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onSelect}
-      className={`flex min-h-20 w-full items-start gap-3 rounded-lg border p-4 text-left transition ${
-        checked ? "border-blue-400 bg-blue-50" : "border-zinc-200 bg-white"
-      } ${disabled ? "cursor-default opacity-80" : "hover:border-zinc-400"}`}
-      aria-pressed={checked}
-    >
-      <span className={`mt-1 flex size-5 shrink-0 items-center justify-center rounded-full border ${checked ? "border-blue-700 bg-blue-700" : "border-zinc-400 bg-white"}`}>
-        {checked ? <span className="size-2 rounded-full bg-white" /> : null}
-      </span>
-      <TimeOptionContent option={option} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
-    </button>
   );
 }
 
@@ -649,6 +701,8 @@ function OptionVoteRow({
   disabled,
   showResults,
   totalVotes: votesTotal,
+  hostTimezone,
+  viewerTimezone,
   onClick,
 }: {
   option: PollOption;
@@ -657,25 +711,32 @@ function OptionVoteRow({
   disabled: boolean;
   showResults: boolean;
   totalVotes: number;
+  hostTimezone?: string;
+  viewerTimezone?: string;
   onClick: () => void;
 }) {
   const percent = votesTotal ? Math.round((option.voteCount / votesTotal) * 100) : 0;
+  const hasTimeWindow = Boolean(option.startAt && option.endAt);
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
       className={`block w-full rounded-lg border p-4 text-left transition ${
-        checked ? "border-blue-400 bg-blue-50" : "border-zinc-200 bg-white"
-      } ${disabled ? "cursor-default opacity-80" : "hover:border-zinc-400"}`}
+        checked ? "border-teal-400 bg-teal-50" : "border-zinc-200 bg-white"
+      } ${disabled ? "cursor-default opacity-80" : "hover:border-teal-300"}`}
       aria-pressed={checked}
     >
       <div className="flex items-start gap-3">
-        <span className={`mt-1 flex size-5 shrink-0 items-center justify-center ${multiChoice ? "rounded" : "rounded-full"} border ${checked ? "border-blue-700 bg-blue-700 text-white" : "border-zinc-400 bg-white"}`}>
+        <span className={`mt-1 flex size-5 shrink-0 items-center justify-center ${multiChoice ? "rounded" : "rounded-full"} border ${checked ? "border-teal-700 bg-teal-700 text-white" : "border-zinc-400 bg-white"}`}>
           {checked ? (multiChoice ? <span className="size-2.5 rounded-sm bg-white" /> : <span className="size-2 rounded-full bg-white" />) : null}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-zinc-950">{option.label}</div>
+          {hasTimeWindow ? (
+            <TimeOptionContent option={option} showLabel={false} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
+          ) : (
+            <div className="font-medium text-zinc-950">{option.label}</div>
+          )}
           {showResults ? <ResultMeter option={option} totalVotes={votesTotal} percent={percent} /> : null}
         </div>
       </div>
@@ -683,7 +744,17 @@ function OptionVoteRow({
   );
 }
 
-function CompactResults({ options, emptyText }: { options: PollOption[]; emptyText: string }) {
+function CompactResults({
+  options,
+  emptyText,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  options: PollOption[];
+  emptyText: string;
+  hostTimezone?: string;
+  viewerTimezone?: string;
+}) {
   if (!options.some((option) => option.voteCount > 0)) {
     return <p className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">{emptyText}</p>;
   }
@@ -695,7 +766,13 @@ function CompactResults({ options, emptyText }: { options: PollOption[]; emptyTe
         return (
           <div key={option.id} className="rounded-lg border border-zinc-200 bg-white p-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 font-medium text-zinc-950">{option.label}</div>
+              <div className="min-w-0 font-medium text-zinc-950">
+                {option.startAt && option.endAt ? (
+                  <TimeOptionContent option={option} showLabel={false} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
+                ) : (
+                  option.label
+                )}
+              </div>
               <div className="shrink-0 text-sm text-zinc-500">
                 {option.voteCount} {option.voteCount === 1 ? "vote" : "votes"} · {percent}%
               </div>
@@ -1148,6 +1225,44 @@ function dateKeyInZone(value: string, timeZone: string) {
     day: "2-digit",
     timeZone,
   }).format(new Date(value));
+}
+
+function hourInZone(value: string, timeZone: string) {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).format(new Date(value));
+  return Number(hour);
+}
+
+function uniqueSortedDateKeys(values: string[]) {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => new Date(`${a}T00:00:00`).getTime() - new Date(`${b}T00:00:00`).getTime());
+}
+
+function weekdayShort(dateKey: string) {
+  return new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(`${dateKey}T00:00:00`));
+}
+
+function monthShort(dateKey: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(`${dateKey}T00:00:00`));
+}
+
+function dayNumber(dateKey: string) {
+  return new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(new Date(`${dateKey}T00:00:00`));
+}
+
+function hourLabel(hour: number) {
+  const value = hour % 12;
+  return String(value === 0 ? 12 : value);
+}
+
+function hourMeridiem(hour: number) {
+  return hour < 12 ? "am" : "pm";
+}
+
+function formatHour(hour: number) {
+  return `${hourLabel(hour)} ${hourMeridiem(hour)}`;
 }
 
 function zoneLabel(timeZone: string) {

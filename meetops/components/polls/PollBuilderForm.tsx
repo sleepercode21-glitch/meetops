@@ -34,7 +34,7 @@ export function PollBuilderForm({
   const [pollType, setPollType] = useState<PollType>(initialPollType);
   const [multiChoice, setMultiChoice] = useState(existingPoll?.multiChoice ?? initialPollType === "availability");
   const [calendarInvitePolicy, setCalendarInvitePolicy] = useState<CalendarInvitePolicy>("all_members");
-  const [deadline, setDeadline] = useState(toLocalDateTime(existingPoll?.deadline));
+  const [deadline, setDeadline] = useState(toLocalDateTime(existingPoll?.deadline) || defaultDeadline());
   const [minimumDeadline] = useState(() => toLocalDateTime(new Date(Date.now() + 60_000).toISOString()));
   const [options, setOptions] = useState<DraftOption[]>(
     initialPollType === "interest"
@@ -77,25 +77,13 @@ export function PollBuilderForm({
     );
   }
 
-  function updateStartTime(index: number, startAt: string) {
-    setOptions((current) =>
-      current.map((option, optionIndex) => {
-        if (optionIndex !== index) return option;
-        const nextEnd = !option.end_at || option.end_at <= startAt
-          ? addMinutesToLocalDateTime(startAt, 60)
-          : option.end_at;
-        return { ...option, start_at: startAt, end_at: nextEnd };
-      }),
-    );
-  }
-
   function removeOption(index: number) {
     setOptions((current) => {
       const next = current.map((item, itemIndex) =>
         itemIndex === index ? { ...item, deleted: true } : item,
       );
       return next.every((item) => item.deleted)
-        ? [...next, { label: "", start_at: "", end_at: "" }]
+        ? [...next, nextOptionForType(pollType, next)]
         : next;
     });
   }
@@ -193,7 +181,7 @@ export function PollBuilderForm({
   }
 
   async function createOption(pollId: string, option: DraftOption, index: number) {
-    const label = optionLabel(option, timeBased, index, pollType);
+    const label = optionLabel(option, timeBased, index);
     const response = await fetch(`/api/v1/polls/${pollId}/options`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -210,7 +198,7 @@ export function PollBuilderForm({
     const response = await fetch(`/api/v1/poll-options/${optionId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(optionBody(option, timeBased, index, pollType)),
+      body: JSON.stringify(optionBody(option, timeBased, index)),
     });
     if (!response.ok) throw new Error(await apiMessage(response, "Could not update option."));
   }
@@ -327,40 +315,29 @@ export function PollBuilderForm({
           </div>
           <div className="text-xs text-zinc-500">{activeOptions.length} option{activeOptions.length === 1 ? "" : "s"}</div>
         </div>
-        <div className="space-y-3">
-          {options.map((option, index) => {
-            if (option.deleted) return null;
-            const rowError = timeBased && !isBlankDraftOption(option, timeBased)
-              ? timeOptionError(option, minimumDeadline)
-              : null;
-            return (
-            <div key={option.id ?? index} className={`rounded-xl border p-3 ${rowError ? "border-rose-300 bg-rose-50/50" : "border-zinc-200 bg-zinc-50/40"}`}>
-              <div className={`grid gap-3 ${pollType === "availability" ? "md:grid-cols-[1fr_1fr_auto]" : "md:grid-cols-[1fr_1fr_1fr_auto]"}`}>
-                {pollType !== "availability" ? (
+        {timeBased ? (
+          <TimeSlotOptionsEditor
+            options={options}
+            minimumDateTime={minimumDeadline}
+            onChange={setOptions}
+          />
+        ) : (
+          <div className="space-y-3">
+            {options.map((option, index) => {
+              if (option.deleted) return null;
+              return (
+              <div key={option.id ?? index} className="rounded-xl border border-zinc-200 bg-zinc-50/40 p-3">
+                <div className="grid gap-3 md:grid-cols-[1fr_auto]">
                   <label className="block">
                     <span className="mb-1 block text-xs font-medium text-zinc-600">Label</span>
                     <input
                       value={option.label}
                       disabled={fixedInterest}
                       className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm"
-                      placeholder={timeBased ? "Optional label" : "Option label"}
+                      placeholder="Option label"
                       onChange={(event) => updateOption(index, { label: event.target.value })}
                     />
                   </label>
-                ) : null}
-                {timeBased ? (
-                  <>
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">From</span>
-                      <input type="datetime-local" value={option.start_at} min={minimumDeadline} className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm" onChange={(event) => updateStartTime(index, event.target.value)} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">To</span>
-                      <input type="datetime-local" value={option.end_at} min={option.start_at || minimumDeadline} className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm" onChange={(event) => updateOption(index, { end_at: event.target.value })} />
-                    </label>
-                  </>
-                ) : null}
-                {!fixedInterest ? (
                   <ConfirmButton
                     className="min-h-11 self-end"
                     onConfirm={() => removeOption(index)}
@@ -372,15 +349,14 @@ export function PollBuilderForm({
                   >
                     Remove
                   </ConfirmButton>
-                ) : null}
+                </div>
               </div>
-              {rowError ? <p className="mt-2 text-sm text-rose-700">{rowError}</p> : null}
-            </div>
-          );})}
-        </div>
-        <Button type="button" className="mt-3" onClick={() => setOptions((current) => [...current, { label: "", start_at: "", end_at: "" }])}>
-          {timeBased ? "Add Time Option" : "Add Option"}
-        </Button>
+            );})}
+            <Button type="button" className="mt-3" onClick={() => setOptions((current) => [...current, nextOptionForType(pollType, current)])}>
+              Add Option
+            </Button>
+          </div>
+        )}
       </section> : (
         <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <h2 className="text-sm font-semibold text-emerald-950">Interest check</h2>
@@ -486,6 +462,143 @@ function PolicyRadio({
   );
 }
 
+function TimeSlotOptionsEditor({
+  options,
+  minimumDateTime,
+  onChange,
+}: {
+  options: DraftOption[];
+  minimumDateTime: string;
+  onChange: (options: DraftOption[]) => void;
+}) {
+  const activeOptions = options.filter((option) => !option.deleted && option.start_at);
+  const optionDateKeys = activeOptions.map((option) => localInputDate(option.start_at));
+  const [extraDateKeys, setExtraDateKeys] = useState<string[]>([]);
+  const dateKeys = uniqueSortedDateKeys([
+    localInputDate(defaultStartTime()),
+    ...optionDateKeys,
+    ...extraDateKeys,
+  ]);
+  const selectedHours = new Set(
+    activeOptions.map((option) => `${localInputDate(option.start_at)}:${localInputHour(option.start_at)}`),
+  );
+
+  function selectDate(dateKey: string) {
+    setExtraDateKeys((current) => uniqueSortedDateKeys([...current, dateKey]));
+  }
+
+  function toggleHour(dateKey: string, hour: number) {
+    const start = localDateTime(dateKey, hour);
+    if (start < minimumDateTime) return;
+    const existingIndex = options.findIndex((option) => (
+      !option.deleted &&
+      option.start_at &&
+      localInputDate(option.start_at) === dateKey &&
+      localInputHour(option.start_at) === hour
+    ));
+    if (existingIndex >= 0) {
+      onChange(options.map((option, index) => index === existingIndex ? { ...option, deleted: true } : option));
+    } else {
+      onChange([
+        ...options,
+        {
+          label: "",
+          start_at: start,
+          end_at: addMinutesToLocalDateTime(start, 60),
+        },
+      ]);
+    }
+  }
+
+  const lastDate = dateKeys[dateKeys.length - 1] ?? localInputDate(defaultStartTime());
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <input
+          type="date"
+          value={lastDate}
+          min={localInputDate(minimumDateTime)}
+          onChange={(event) => selectDate(event.target.value)}
+          className="min-h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm sm:w-44"
+          aria-label="Add date"
+        />
+        <div className="text-sm font-medium text-zinc-600">
+          Click hours to add or remove 1-hour choices.
+        </div>
+      </div>
+      <div className="space-y-2">
+        {dateKeys.map((dateKey) => (
+          <HourBar
+            key={dateKey}
+            dateKey={dateKey}
+            selectedHours={selectedHours}
+            minimumDateTime={minimumDateTime}
+            onSelect={toggleHour}
+          />
+        ))}
+      </div>
+      <Button
+        type="button"
+        className="mt-3"
+        onClick={() => setExtraDateKeys((current) => uniqueSortedDateKeys([...current, addDaysToDateKey(lastDate, 1)]))}
+      >
+        Add Next Day
+      </Button>
+      <p className="mt-2 text-xs text-zinc-500">
+        Each selected hour becomes one vote option. Members can only choose from these selected slots.
+      </p>
+    </div>
+  );
+}
+
+function HourBar({
+  dateKey,
+  selectedHours,
+  minimumDateTime,
+  onSelect,
+}: {
+  dateKey: string;
+  selectedHours: Set<string>;
+  minimumDateTime: string;
+  onSelect: (dateKey: string, hour: number) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-teal-100 bg-teal-50 p-1">
+      <div className="grid grid-cols-[56px_repeat(24,minmax(0,1fr))] items-stretch">
+        <div className="flex min-h-14 flex-col items-center justify-center rounded-lg bg-teal-500 px-1 text-center text-[10px] font-bold uppercase leading-tight text-white">
+          <span>{weekdayShort(dateKey)}</span>
+          <span>{monthShort(dateKey)}</span>
+          <span className="text-base leading-none">{dayNumber(dateKey)}</span>
+        </div>
+        {Array.from({ length: 24 }, (_, hour) => {
+          const selected = selectedHours.has(`${dateKey}:${hour}`);
+          const disabled = localDateTime(dateKey, hour) < minimumDateTime;
+          return (
+            <button
+              key={`${dateKey}-${hour}`}
+              type="button"
+              disabled={disabled}
+              className={`flex min-h-14 min-w-0 flex-col items-center justify-center border-l border-white/70 text-xs font-semibold transition ${
+                selected
+                  ? "bg-teal-500 text-white shadow-inner"
+                  : disabled
+                    ? "bg-zinc-100 text-zinc-300"
+                    : "bg-teal-50 text-teal-800 hover:bg-teal-100"
+              } ${disabled ? "cursor-not-allowed" : ""}`}
+              onClick={() => onSelect(dateKey, hour)}
+              aria-label={`${formatHour(hour)} on ${dateKey}`}
+            >
+              <span className="text-sm leading-none sm:text-base">{hourLabel(hour)}</span>
+              <span className="text-[9px] leading-none">{hourMeridiem(hour)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function fixedInterestOptions(existing: { id: string; label: string; startAt?: string; endAt?: string }[] = []): DraftOption[] {
   const interested = existing.find((option) => option.label.trim().toLowerCase() === "interested");
   const maybe = existing.find((option) => option.label.trim().toLowerCase() === "maybe");
@@ -496,10 +609,8 @@ function fixedInterestOptions(existing: { id: string; label: string; startAt?: s
 }
 
 function emptyOptionsForType(type: PollType): DraftOption[] {
-  if (type === "availability") {
-    return [
-      { label: "", start_at: "", end_at: "" },
-    ];
+  if (type === "availability" || type === "final_timing") {
+    return [defaultTimeOption()];
   }
   return [{ label: "", start_at: "", end_at: "" }];
 }
@@ -546,8 +657,8 @@ function pollFlowIndex(type: PollType) {
   return ["interest", "topic", "availability", "final_timing"].indexOf(type);
 }
 
-function optionBody(option: DraftOption, timeBased: boolean, index: number, pollType: PollType) {
-  const label = optionLabel(option, timeBased, index, pollType);
+function optionBody(option: DraftOption, timeBased: boolean, index: number) {
+  const label = optionLabel(option, timeBased, index);
   return {
     label,
     start_at: timeBased && option.start_at ? new Date(option.start_at).toISOString() : null,
@@ -555,8 +666,8 @@ function optionBody(option: DraftOption, timeBased: boolean, index: number, poll
   };
 }
 
-function optionLabel(option: DraftOption, timeBased: boolean, index: number, pollType: PollType) {
-  if (pollType === "availability" && option.start_at && option.end_at) {
+function optionLabel(option: DraftOption, timeBased: boolean, index: number) {
+  if (timeBased && option.start_at && option.end_at) {
     return `${new Date(option.start_at).toISOString()} - ${new Date(option.end_at).toISOString()}`;
   }
   return option.label || (timeBased ? `Option ${index + 1}` : "");
@@ -564,7 +675,7 @@ function optionLabel(option: DraftOption, timeBased: boolean, index: number, pol
 
 function isBlankDraftOption(option: DraftOption, timeBased: boolean) {
   if (option.deleted) return false;
-  if (timeBased) return !option.label.trim() && !option.start_at && !option.end_at;
+  if (timeBased) return !option.start_at && !option.end_at;
   return !option.label.trim();
 }
 
@@ -581,6 +692,90 @@ function addMinutesToLocalDateTime(value: string, minutes: number) {
   if (Number.isNaN(date.getTime())) return "";
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() + minutes * 60_000 - offset).toISOString().slice(0, 16);
+}
+
+function addDaysToDateKey(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return dateKeyFromLocalDate(date);
+}
+
+function localDateTime(dateKey: string, hour: number) {
+  return `${dateKey}T${String(hour).padStart(2, "0")}:00`;
+}
+
+function localInputDate(value: string) {
+  return value.slice(0, 10);
+}
+
+function localInputHour(value: string) {
+  const hour = Number(value.slice(11, 13));
+  return Number.isFinite(hour) ? hour : 0;
+}
+
+function dateKeyFromLocalDate(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function uniqueSortedDateKeys(values: string[]) {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => new Date(`${a}T00:00:00`).getTime() - new Date(`${b}T00:00:00`).getTime());
+}
+
+function weekdayShort(dateKey: string) {
+  return new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(`${dateKey}T00:00:00`));
+}
+
+function monthShort(dateKey: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(`${dateKey}T00:00:00`));
+}
+
+function dayNumber(dateKey: string) {
+  return new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(new Date(`${dateKey}T00:00:00`));
+}
+
+function hourLabel(hour: number) {
+  const value = hour % 12;
+  return String(value === 0 ? 12 : value);
+}
+
+function hourMeridiem(hour: number) {
+  return hour < 12 ? "am" : "pm";
+}
+
+function formatHour(hour: number) {
+  return `${hourLabel(hour)} ${hourMeridiem(hour)}`;
+}
+
+function nextOptionForType(type: PollType, current: DraftOption[]): DraftOption {
+  if (type !== "availability" && type !== "final_timing") {
+    return { label: "", start_at: "", end_at: "" };
+  }
+  const lastEnd = [...current].reverse().find((option) => !option.deleted && option.end_at)?.end_at;
+  return defaultTimeOption(lastEnd);
+}
+
+function defaultTimeOption(after?: string): DraftOption {
+  const fallback = defaultStartTime();
+  const start = after && after > fallback ? after : fallback;
+  return {
+    label: "",
+    start_at: start,
+    end_at: addMinutesToLocalDateTime(start, 60),
+  };
+}
+
+function defaultStartTime() {
+  const date = new Date(Date.now() + 60 * 60_000);
+  date.setMinutes(0, 0, 0);
+  return toLocalDateTime(date.toISOString());
+}
+
+function defaultDeadline() {
+  return toLocalDateTime(new Date(Date.now() + 24 * 60 * 60_000).toISOString());
 }
 
 function toLocalDateTime(value?: string) {

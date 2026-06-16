@@ -38,6 +38,9 @@ export async function POST(request: NextRequest, context: Context) {
     if (result.outcome === "failed") {
       throw new ApiError(result.code === "VALIDATION_ERROR" ? "VALIDATION_ERROR" : "GOOGLE_CALENDAR_CREATE_FAILED", result.message);
     }
+    if (result.outcome !== "scheduled") {
+      throw new ApiError("INVALID_SESSION_STATUS", "The session could not be claimed for scheduling. Refresh and try again.");
+    }
     return dataResponse(result);
   } catch (error) {
     return errorResponse(error);

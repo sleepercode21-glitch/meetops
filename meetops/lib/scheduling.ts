@@ -80,6 +80,9 @@ export async function scheduleSession(input: ScheduleSessionInput): Promise<Sche
       status: {
         in: [
           "draft",
+          "interest_check",
+          "topic_selection",
+          "availability_collection",
           "polling",
           "needs_host_decision",
           "rescheduling",
@@ -184,6 +187,17 @@ export async function scheduleSession(input: ScheduleSessionInput): Promise<Sche
             source: input.source,
             selected_option_id: toId(resolved.selectedOptionId),
           },
+        },
+      });
+
+      await tx.poll.updateMany({
+        where: {
+          sessionId: input.sessionId,
+          status: { in: ["active", "draft"] },
+        },
+        data: {
+          status: "superseded",
+          closedAt: new Date(),
         },
       });
 
