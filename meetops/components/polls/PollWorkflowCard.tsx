@@ -93,7 +93,6 @@ function AvailabilityPollCard({
         {canManage && poll.status === "active" ? (
           <>
             <AvailabilityLiveSummary options={rankedOptions} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
-            <RankedResults options={rankedOptions} emptyText="No availability responses yet." hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} />
           </>
         ) : null}
         {poll.status === "active" ? (
@@ -915,32 +914,31 @@ function CreateFinalTimingFromAvailabilityCard({
   return (
     <Card>
       <h2 className="text-lg font-semibold text-zinc-950">Choose final vote options</h2>
-      <p className="mt-1 text-sm text-zinc-600">Selected overlap windows become the choices in the final timing poll.</p>
-      <div className="mt-4 space-y-2">
-        {recommendations.length ? recommendations.map((recommendation) => {
-          const key = recommendationKey(recommendation);
-          return (
-            <label key={key} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3">
-              <input
-                type="checkbox"
-                className="mt-1 size-4"
-                checked={selected.includes(key)}
-                onChange={() => setSelected((current) => toggleMulti(current, key))}
-              />
-              <span className="min-w-0 flex-1">
-                <DualTimeRange option={recommendationOption(recommendation)} hostTimezone={hostTimezone} viewerTimezone={displayTimezone} />
-                <span className="mt-1 block text-sm text-zinc-500">
-                  {recommendation.available_count} {recommendation.available_count === 1 ? "person" : "people"} available · {recommendation.duration_minutes} min overlap
-                </span>
-              </span>
-            </label>
-          );
-        }) : (
+      <p className="mt-1 text-sm text-zinc-600">Tap the slots that should become final timing choices.</p>
+      <div className="mt-4">
+        {recommendations.length ? (
+          <TimeSlotVoteGrid
+            options={recommendations.map(recommendationOption)}
+            selectedIds={selected}
+            mode="multiple"
+            disabled={pending}
+            viewerTimezone={displayTimezone}
+            onToggle={(option) => setSelected((current) => toggleMulti(current, option.id))}
+          />
+        ) : (
           <p className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
             No overlapping availability was submitted. Ask members to add availability or pick a timing manually.
           </p>
         )}
       </div>
+      {recommendations.length ? (
+        <SelectedRecommendationSummary
+          recommendations={recommendations}
+          selected={selected}
+          hostTimezone={hostTimezone}
+          viewerTimezone={displayTimezone}
+        />
+      ) : null}
       <label className="mt-4 block">
         <span className="text-sm font-medium text-zinc-950">Final vote deadline</span>
         <input
@@ -982,6 +980,45 @@ function CreateFinalTimingFromAvailabilityCard({
       </Button>
       {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
     </Card>
+  );
+}
+
+function SelectedRecommendationSummary({
+  recommendations,
+  selected,
+  hostTimezone,
+  viewerTimezone,
+}: {
+  recommendations: AvailabilityRecommendation[];
+  selected: string[];
+  hostTimezone?: string;
+  viewerTimezone?: string;
+}) {
+  const selectedRecommendations = recommendations.filter((recommendation) => selected.includes(recommendationKey(recommendation)));
+  if (!selectedRecommendations.length) {
+    return (
+      <p className="mt-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3 text-sm text-zinc-600">
+        No final timing slots selected yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-teal-100 bg-teal-50/60 p-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-teal-800">
+        {selectedRecommendations.length} selected for final vote
+      </div>
+      <div className="mt-2 grid gap-2">
+        {selectedRecommendations.map((recommendation) => (
+          <div key={recommendationKey(recommendation)} className="rounded-md bg-white/80 px-3 py-2 text-sm">
+            <DualTimeRange option={recommendationOption(recommendation)} hostTimezone={hostTimezone} viewerTimezone={viewerTimezone} compact />
+            <div className="mt-1 text-xs text-zinc-500">
+              {recommendation.available_count} {recommendation.available_count === 1 ? "person" : "people"} available · {recommendation.duration_minutes} min overlap
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -18,9 +18,11 @@ export function PollBuilderForm({
   sessionId,
   existingPoll,
   defaultPollType = "interest",
+  viewerTimezone,
 }: {
   sessionId: string;
   defaultPollType?: PollType;
+  viewerTimezone?: string;
   existingPoll?: {
     id: string;
     type: PollType;
@@ -30,12 +32,13 @@ export function PollBuilderForm({
   };
 }) {
   const router = useRouter();
+  const displayTimezone = viewerTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const initialPollType = existingPoll?.type ?? defaultPollType;
   const [pollType, setPollType] = useState<PollType>(initialPollType);
   const [multiChoice, setMultiChoice] = useState(existingPoll?.multiChoice ?? initialPollType === "availability");
   const [calendarInvitePolicy, setCalendarInvitePolicy] = useState<CalendarInvitePolicy>("all_members");
-  const [deadline, setDeadline] = useState(toLocalDateTime(existingPoll?.deadline) || defaultDeadline());
-  const [minimumDeadline] = useState(() => toLocalDateTime(new Date(Date.now() + 60_000).toISOString()));
+  const [deadline, setDeadline] = useState(toDateTimeInputInZone(existingPoll?.deadline, displayTimezone) || defaultDeadline(displayTimezone));
+  const [minimumDeadline] = useState(() => toDateTimeInputInZone(new Date(Date.now() + 60_000).toISOString(), displayTimezone));
   const [options, setOptions] = useState<DraftOption[]>(
     initialPollType === "interest"
       ? fixedInterestOptions(existingPoll?.options)
@@ -43,10 +46,10 @@ export function PollBuilderForm({
       ? existingPoll.options.map((option) => ({
           id: option.id,
           label: option.label,
-          start_at: toLocalDateTime(option.startAt),
-          end_at: toLocalDateTime(option.endAt),
+          start_at: toDateTimeInputInZone(option.startAt, displayTimezone),
+          end_at: toDateTimeInputInZone(option.endAt, displayTimezone),
         }))
-      : emptyOptionsForType(initialPollType),
+      : emptyOptionsForType(initialPollType, displayTimezone),
   );
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +67,7 @@ export function PollBuilderForm({
     } else {
       setMultiChoice(nextType === "availability");
       if (pollType === "interest" || options.filter((option) => !option.deleted).length <= 1) {
-        setOptions(emptyOptionsForType(nextType));
+        setOptions(emptyOptionsForType(nextType, displayTimezone));
       }
     }
   }
@@ -83,7 +86,7 @@ export function PollBuilderForm({
         itemIndex === index ? { ...item, deleted: true } : item,
       );
       return next.every((item) => item.deleted)
-        ? [...next, nextOptionForType(pollType, next)]
+        ? [...next, nextOptionForType(pollType, next, displayTimezone)]
         : next;
     });
   }
@@ -150,7 +153,7 @@ export function PollBuilderForm({
       body: JSON.stringify({
         type: pollType,
         multi_choice: effectiveMultiChoice,
-        deadline: deadline ? new Date(deadline).toISOString() : null,
+        deadline: deadline ? zonedInputToIso(deadline, displayTimezone) : null,
         ...(pollType === "final_timing" ? { calendar_invite_policy: calendarInvitePolicy } : {}),
       }),
     });
@@ -165,7 +168,7 @@ export function PollBuilderForm({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         multi_choice: effectiveMultiChoice,
-        deadline: deadline ? new Date(deadline).toISOString() : null,
+        deadline: deadline ? zonedInputToIso(deadline, displayTimezone) : null,
       }),
     });
     if (!response.ok) throw new Error(await apiMessage(response, "Could not update poll."));
@@ -181,14 +184,14 @@ export function PollBuilderForm({
   }
 
   async function createOption(pollId: string, option: DraftOption, index: number) {
-    const label = optionLabel(option, timeBased, index);
+    const label = optionLabel(option, timeBased, index, displayTimezone);
     const response = await fetch(`/api/v1/polls/${pollId}/options`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         label,
-        start_at: timeBased && option.start_at ? new Date(option.start_at).toISOString() : null,
-        end_at: timeBased && option.end_at ? new Date(option.end_at).toISOString() : null,
+        start_at: timeBased && option.start_at ? zonedInputToIso(option.start_at, displayTimezone) : null,
+        end_at: timeBased && option.end_at ? zonedInputToIso(option.end_at, displayTimezone) : null,
       }),
     });
     if (!response.ok) throw new Error(await apiMessage(response, "Could not add option."));
@@ -198,7 +201,7 @@ export function PollBuilderForm({
     const response = await fetch(`/api/v1/poll-options/${optionId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(optionBody(option, timeBased, index)),
+      body: JSON.stringify(optionBody(option, timeBased, index, displayTimezone)),
     });
     if (!response.ok) throw new Error(await apiMessage(response, "Could not update option."));
   }
@@ -319,6 +322,7 @@ export function PollBuilderForm({
           <TimeSlotOptionsEditor
             options={options}
             minimumDateTime={minimumDeadline}
+            defaultDateTime={defaultStartTime(displayTimezone)}
             onChange={setOptions}
           />
         ) : (
@@ -352,7 +356,7 @@ export function PollBuilderForm({
                 </div>
               </div>
             );})}
-            <Button type="button" className="mt-3" onClick={() => setOptions((current) => [...current, nextOptionForType(pollType, current)])}>
+            <Button type="button" className="mt-3" onClick={() => setOptions((current) => [...current, nextOptionForType(pollType, current, displayTimezone)])}>
               Add Option
             </Button>
           </div>
@@ -465,17 +469,19 @@ function PolicyRadio({
 function TimeSlotOptionsEditor({
   options,
   minimumDateTime,
+  defaultDateTime,
   onChange,
 }: {
   options: DraftOption[];
   minimumDateTime: string;
+  defaultDateTime: string;
   onChange: (options: DraftOption[]) => void;
 }) {
   const activeOptions = options.filter((option) => !option.deleted && option.start_at);
   const optionDateKeys = activeOptions.map((option) => localInputDate(option.start_at));
   const [extraDateKeys, setExtraDateKeys] = useState<string[]>([]);
   const dateKeys = uniqueSortedDateKeys([
-    localInputDate(defaultStartTime()),
+    localInputDate(defaultDateTime),
     ...optionDateKeys,
     ...extraDateKeys,
   ]);
@@ -510,7 +516,7 @@ function TimeSlotOptionsEditor({
     }
   }
 
-  const lastDate = dateKeys[dateKeys.length - 1] ?? localInputDate(defaultStartTime());
+  const lastDate = dateKeys[dateKeys.length - 1] ?? localInputDate(defaultDateTime);
 
   return (
     <div>
@@ -608,9 +614,9 @@ function fixedInterestOptions(existing: { id: string; label: string; startAt?: s
   ];
 }
 
-function emptyOptionsForType(type: PollType): DraftOption[] {
+function emptyOptionsForType(type: PollType, timeZone: string): DraftOption[] {
   if (type === "availability" || type === "final_timing") {
-    return [defaultTimeOption()];
+    return [defaultTimeOption(timeZone)];
   }
   return [{ label: "", start_at: "", end_at: "" }];
 }
@@ -657,18 +663,18 @@ function pollFlowIndex(type: PollType) {
   return ["interest", "topic", "availability", "final_timing"].indexOf(type);
 }
 
-function optionBody(option: DraftOption, timeBased: boolean, index: number) {
-  const label = optionLabel(option, timeBased, index);
+function optionBody(option: DraftOption, timeBased: boolean, index: number, timeZone: string) {
+  const label = optionLabel(option, timeBased, index, timeZone);
   return {
     label,
-    start_at: timeBased && option.start_at ? new Date(option.start_at).toISOString() : null,
-    end_at: timeBased && option.end_at ? new Date(option.end_at).toISOString() : null,
+    start_at: timeBased && option.start_at ? zonedInputToIso(option.start_at, timeZone) : null,
+    end_at: timeBased && option.end_at ? zonedInputToIso(option.end_at, timeZone) : null,
   };
 }
 
-function optionLabel(option: DraftOption, timeBased: boolean, index: number) {
+function optionLabel(option: DraftOption, timeBased: boolean, index: number, timeZone: string) {
   if (timeBased && option.start_at && option.end_at) {
-    return `${new Date(option.start_at).toISOString()} - ${new Date(option.end_at).toISOString()}`;
+    return `${zonedInputToIso(option.start_at, timeZone)} - ${zonedInputToIso(option.end_at, timeZone)}`;
   }
   return option.label || (timeBased ? `Option ${index + 1}` : "");
 }
@@ -750,16 +756,16 @@ function formatHour(hour: number) {
   return `${hourLabel(hour)} ${hourMeridiem(hour)}`;
 }
 
-function nextOptionForType(type: PollType, current: DraftOption[]): DraftOption {
+function nextOptionForType(type: PollType, current: DraftOption[], timeZone: string): DraftOption {
   if (type !== "availability" && type !== "final_timing") {
     return { label: "", start_at: "", end_at: "" };
   }
   const lastEnd = [...current].reverse().find((option) => !option.deleted && option.end_at)?.end_at;
-  return defaultTimeOption(lastEnd);
+  return defaultTimeOption(timeZone, lastEnd);
 }
 
-function defaultTimeOption(after?: string): DraftOption {
-  const fallback = defaultStartTime();
+function defaultTimeOption(timeZone: string, after?: string): DraftOption {
+  const fallback = defaultStartTime(timeZone);
   const start = after && after > fallback ? after : fallback;
   return {
     label: "",
@@ -768,21 +774,65 @@ function defaultTimeOption(after?: string): DraftOption {
   };
 }
 
-function defaultStartTime() {
+function defaultStartTime(timeZone: string) {
   const date = new Date(Date.now() + 60 * 60_000);
   date.setMinutes(0, 0, 0);
-  return toLocalDateTime(date.toISOString());
+  return toDateTimeInputInZone(date.toISOString(), timeZone);
 }
 
-function defaultDeadline() {
-  return toLocalDateTime(new Date(Date.now() + 24 * 60 * 60_000).toISOString());
+function defaultDeadline(timeZone: string) {
+  return toDateTimeInputInZone(new Date(Date.now() + 24 * 60 * 60_000).toISOString(), timeZone);
 }
 
-function toLocalDateTime(value?: string) {
+function toDateTimeInputInZone(value: string | undefined, timeZone: string) {
   if (!value) return "";
   const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = dateTimePartsInZone(date, timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+function zonedInputToIso(value: string, timeZone: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) return new Date(value).toISOString();
+  const [, year, month, day, hour, minute] = match;
+  const utcGuess = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)));
+  const firstPass = new Date(utcGuess.getTime() - offsetForZone(utcGuess, timeZone));
+  const corrected = new Date(utcGuess.getTime() - offsetForZone(firstPass, timeZone));
+  return corrected.toISOString();
+}
+
+function offsetForZone(date: Date, timeZone: string) {
+  const parts = dateTimePartsInZone(date, timeZone);
+  const wallAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+  );
+  const roundedDate = Math.floor(date.getTime() / 60000) * 60000;
+  return wallAsUtc - roundedDate;
+}
+
+function dateTimePartsInZone(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: value.year,
+    month: value.month,
+    day: value.day,
+    hour: value.hour === "24" ? "00" : value.hour,
+    minute: value.minute,
+  };
 }
 
 async function apiMessage(response: Response, fallback: string) {

@@ -4,7 +4,7 @@ import { Card } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PollBuilderForm } from "@/components/polls/PollBuilderForm";
 import { pollTypeLabels } from "@/lib/labels";
-import { ApiRequestError, getPollDetail, getSessionDetail, getSessionPolls } from "@/lib/web-api";
+import { ApiRequestError, getCurrentUser, getPollDetail, getSessionDetail, getSessionPolls } from "@/lib/web-api";
 import type { Poll, PollType, Session } from "@/types/domain";
 
 export async function PollEditorPage({
@@ -16,7 +16,7 @@ export async function PollEditorPage({
   pollId?: string;
   requestedType?: string;
 }) {
-  const { session, poll, polls } = await getEditorData(sessionId, pollId);
+  const { session, poll, polls, currentUser } = await getEditorData(sessionId, pollId);
   const defaultPollType = poll?.type ?? requestedPollType(requestedType) ?? nextPollType(session, polls);
   const title = pollId ? "Edit Poll" : `Create ${pollTypeLabels[defaultPollType]}`;
 
@@ -33,6 +33,7 @@ export async function PollEditorPage({
             sessionId={sessionId}
             existingPoll={poll}
             defaultPollType={defaultPollType}
+            viewerTimezone={currentUser.timezone}
           />
         </Card>
       </div>
@@ -42,12 +43,13 @@ export async function PollEditorPage({
 
 async function getEditorData(sessionId: string, pollId?: string) {
   try {
-    const [session, polls, poll] = await Promise.all([
+    const [session, polls, poll, currentUser] = await Promise.all([
       getSessionDetail(sessionId),
       getSessionPolls(sessionId),
       pollId ? getPollDetail(pollId) : Promise.resolve(undefined),
+      getCurrentUser(),
     ]);
-    return { session, polls, poll };
+    return { session, polls, poll, currentUser };
   } catch (error) {
     if (
       error instanceof ApiRequestError &&
